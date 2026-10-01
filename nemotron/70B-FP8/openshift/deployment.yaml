@@ -32,6 +32,10 @@ spec:
               value: "1"
             - name: TRANSFORMERS_OFFLINE
               value: "1"
+            - name: HF_HUB_DISABLE_TELEMETRY
+              value: "1"
+            - name: VLLM_NO_USAGE_STATS
+              value: "1"
           resources:
             limits:
               nvidia.com/gpu: "1"
