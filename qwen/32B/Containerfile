@@ -6,8 +6,7 @@ ENV MODEL_PATH=/models/Qwen3-32B \
     HF_HUB_OFFLINE=1 \
     TRANSFORMERS_OFFLINE=1
 
-COPY --chown=0:0 ./qwen-model ${MODEL_PATH}
-RUN chmod -R g+rX ${MODEL_PATH}
+COPY --chown=0:0 --chmod=775 ./qwen-model ${MODEL_PATH}
 
 USER 1001
 
