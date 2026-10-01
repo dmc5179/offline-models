@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-MODEL_REPO="nvidia/Llama-3.1-Nemotron-70B-Instruct-HF-FP8-dynamic"
+MODEL_REPO="RedHatAI/Llama-3.1-Nemotron-70B-Instruct-HF-FP8-dynamic"
 LOCAL_DIR="./model"
 REGISTRY="${REGISTRY:-quay.io/danclark}"
 IMAGE_NAME="nemotron-70b-fp8-offline"
