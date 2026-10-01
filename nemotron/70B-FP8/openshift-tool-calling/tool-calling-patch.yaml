@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nemotron-70b-fp8
+spec:
+  template:
+    spec:
+      containers:
+        - name: vllm
+          args:
+            - /models/Llama-3.1-Nemotron-70B-Instruct-HF-FP8-dynamic
+            - --host
+            - "0.0.0.0"
+            - --port
+            - "8000"
+            - --gpu-memory-utilization
+            - "0.92"
+            - --max-model-len
+            - "8192"
+            - --enable-auto-tool-choice
+            - --tool-call-parser
+            - llama3_json
+            - --chat-template
+            - /opt/app-root/template/tool_chat_template_llama3.1_json.jinja

@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: granite-4.0-h-small-fp8
+spec:
+  template:
+    spec:
+      containers:
+        - name: vllm
+          args:
+            - /models/granite-4.0-h-small-FP8-dynamic
+            - --host
+            - "0.0.0.0"
+            - --port
+            - "8000"
+            - --gpu-memory-utilization
+            - "0.90"
+            - --max-model-len
+            - "8192"
+            - --enable-auto-tool-choice
+            - --tool-call-parser
+            - granite4
