@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: granite-4.0-h-small-fp8
+  labels:
+    app: granite-4.0-h-small-fp8
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: granite-4.0-h-small-fp8
+  template:
+    metadata:
+      labels:
+        app: granite-4.0-h-small-fp8
+    spec:
+      serviceAccountName: vllm-inference
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: vllm
+          image: image-registry.openshift-image-registry.svc:5000/granite-inference/granite-4.0-h-small-fp8-offline:latest
+          ports:
+            - containerPort: 8000
+              protocol: TCP
+          env:
+            - name: HF_HUB_OFFLINE
+              value: "1"
+            - name: TRANSFORMERS_OFFLINE
+              value: "1"
+          resources:
+            limits:
+              nvidia.com/gpu: "1"
+              memory: 48Gi
+            requests:
+              nvidia.com/gpu: "1"
+              memory: 32Gi
+              cpu: "4"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            runAsNonRoot: true
+          volumeMounts:
+            - name: shm
+              mountPath: /dev/shm
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 120
+            periodSeconds: 10
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            periodSeconds: 30
+            failureThreshold: 24
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 180
+            periodSeconds: 15
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      volumes:
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Gi

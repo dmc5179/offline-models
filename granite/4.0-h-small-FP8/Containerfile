@@ -1,0 +1,17 @@
+FROM registry.redhat.io/rhaii-preview/vllm-cuda-rhel9:1786522102
+
+USER 0
+
+ENV MODEL_PATH=/models/granite-4.0-h-small-FP8-dynamic \
+    HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1
+
+COPY --chown=0:0 ./model ${MODEL_PATH}
+RUN chmod -R g+rX ${MODEL_PATH}
+
+USER 1001
+
+EXPOSE 8000
+
+ENTRYPOINT ["vllm", "serve"]
+CMD ["/models/granite-4.0-h-small-FP8-dynamic", "--host", "0.0.0.0", "--port", "8000", "--gpu-memory-utilization", "0.90", "--max-model-len", "8192"]

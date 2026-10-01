@@ -1,0 +1,13 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: vllm-inference
+  namespace: gpt-oss-inference
+subjects:
+  - kind: ServiceAccount
+    name: vllm-inference
+    namespace: gpt-oss-inference
+roleRef:
+  kind: Role
+  name: vllm-inference
+  apiGroup: rbac.authorization.k8s.io

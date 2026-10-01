@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: qwen3-32b
+  namespace: qwen-inference
+  labels:
+    app: qwen3-32b
+spec:
+  selector:
+    app: qwen3-32b
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  type: ClusterIP

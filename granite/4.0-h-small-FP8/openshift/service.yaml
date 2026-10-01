@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: granite-4.0-h-small-fp8
+  labels:
+    app: granite-4.0-h-small-fp8
+spec:
+  selector:
+    app: granite-4.0-h-small-fp8
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  type: ClusterIP
