@@ -1,6 +1,6 @@
 # Granite 4.0 Hybrid Small FP8 Offline Inference Container
 
-Air-gapped vLLM serving of [ibm-granite/Granite-4.0-h-small-FP8-dynamic](https://huggingface.co/ibm-granite/Granite-4.0-h-small-FP8-dynamic) using the Red Hat AI Inference Server (`rhaii-preview/vllm-cuda-rhel9`). The model weights are baked into the container image so no network access is required at runtime.
+Air-gapped vLLM serving of [RedHatAI/granite-4.0-h-small-FP8-dynamic](https://huggingface.co/RedHatAI/granite-4.0-h-small-FP8-dynamic) using the Red Hat AI Inference Server (`rhaiis/vllm-cuda-rhel9`). The model weights are baked into the container image so no network access is required at runtime.
 
 Granite 4.0 Hybrid Small is IBM's compact hybrid-architecture model (Mamba SSM + Transformer) with FP8 dynamic quantization for efficient GPU inference.
 
@@ -23,17 +23,17 @@ chmod +x build.sh
 
 What it does:
 
-1. Downloads `ibm-granite/Granite-4.0-h-small-FP8-dynamic` to `./model/`
+1. Downloads `RedHatAI/granite-4.0-h-small-FP8-dynamic` to `./model/`
 2. Builds the container image `granite-4.0-h-small-fp8-offline:latest`
 
-The resulting image bundles the weights at `/models/Granite-4.0-h-small-FP8-dynamic` and sets `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1` so vLLM never attempts to reach HuggingFace.
+The resulting image bundles the weights at `/models/granite-4.0-h-small-FP8-dynamic` and sets `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1` so vLLM never attempts to reach HuggingFace.
 
 ### Base image tag
 
-The Containerfile pins build tag `1786522102` from `registry.redhat.io/rhaii-preview/vllm-cuda-rhel9`. List available tags with:
+The Containerfile pins version tag `3.3.3` from `registry.redhat.io/rhaiis/vllm-cuda-rhel9`. List available tags with:
 
 ```bash
-podman search registry.redhat.io/rhaii-preview/vllm-cuda-rhel9 --list-tags
+podman search registry.redhat.io/rhaiis/vllm-cuda-rhel9 --list-tags
 ```
 
 ## Running with Podman
@@ -69,7 +69,7 @@ podman run --rm \
   --shm-size=8g \
   -p 8000:8000 \
   granite-4.0-h-small-fp8-offline:latest \
-  /models/Granite-4.0-h-small-FP8-dynamic \
+  /models/granite-4.0-h-small-FP8-dynamic \
   --host 0.0.0.0 \
   --port 8000 \
   --gpu-memory-utilization 0.95 \
@@ -82,7 +82,7 @@ podman run --rm \
 curl -s http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "/models/Granite-4.0-h-small-FP8-dynamic",
+    "model": "/models/granite-4.0-h-small-FP8-dynamic",
     "messages": [{"role": "user", "content": "Hello, who are you?"}],
     "max_tokens": 128
   }' | python3 -m json.tool

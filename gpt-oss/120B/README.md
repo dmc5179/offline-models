@@ -1,6 +1,6 @@
 # GPT-OSS-120B Offline Inference Container
 
-Air-gapped vLLM serving of [openai/gpt-oss-120b](https://huggingface.co/openai/gpt-oss-120b) using the Red Hat AI Inference Server (`rhaii-preview/vllm-cuda-rhel9`). The model weights are baked into the container image so no network access is required at runtime.
+Air-gapped vLLM serving of [openai/gpt-oss-120b](https://huggingface.co/openai/gpt-oss-120b) using the Red Hat AI Inference Server (`rhaiis/vllm-cuda-rhel9`). The model weights are baked into the container image so no network access is required at runtime.
 
 GPT-OSS-120B is OpenAI's open-weight Mixture-of-Experts model (117B total params, 5.1B active per token) released under Apache 2.0. It ships with MXFP4 quantization of MoE weights, fitting on a single 80GB GPU (H100/MI300X).
 
@@ -33,10 +33,10 @@ The resulting image bundles the weights at `/models/gpt-oss-120b` and sets `HF_H
 
 ### Base image tag
 
-The Containerfile pins build tag `1786522102` from `registry.redhat.io/rhaii-preview/vllm-cuda-rhel9`. List available tags with:
+The Containerfile pins version tag `3.3.3` from `registry.redhat.io/rhaiis/vllm-cuda-rhel9`. List available tags with:
 
 ```bash
-podman search registry.redhat.io/rhaii-preview/vllm-cuda-rhel9 --list-tags
+podman search registry.redhat.io/rhaiis/vllm-cuda-rhel9 --list-tags
 ```
 
 ## Running with Podman

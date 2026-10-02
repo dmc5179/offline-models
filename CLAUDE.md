@@ -30,7 +30,19 @@ Build must happen on a machine with internet access — the weights are too larg
 
 ## Key Decisions
 
-- **Base image**: `registry.redhat.io/rhaii-preview/vllm-cuda-rhel9:1786522102` for all models
+- **Base image**: `registry.redhat.io/rhaiis/vllm-cuda-rhel9:3.3.3` (GA) for all models. Do **not** use
+  `rhaii-preview/vllm-cuda-rhel9:1786522102` — it is unusable on FIPS-enabled hosts. Its
+  `opencv-python-headless` 5.0.0.93 vendors a FIPS-patched OpenSSL 1.1.1k
+  (`opencv_python_headless.libs/libcrypto-*.so.1.1.1k`) with no HMAC integrity file, so the
+  power-on self-test fails and the process aborts at `import cv2`:
+  `crypto/fips/fips.c:154: OpenSSL internal error: FATAL FIPS SELFTEST FAILURE`.
+  The GA image ships opencv 4.13.0.92, which bundles no OpenSSL, and imports cleanly under FIPS.
+  Verified on a FIPS-enabled RHEL 9.8 host, 2026-10-02.
+- **GA base image tradeoff**: GA runs vLLM `0.13.0+rhai20` vs the preview's `0.27.1.dev827`. Verified
+  that GA registers every architecture used here (`GptOssForCausalLM`, `Qwen3ForCausalLM`,
+  `Qwen3MoeForCausalLM`, `LlamaForCausalLM`, `GraniteMoeHybridForCausalLM`) and supports both
+  `mxfp4` and `compressed-tensors`. Note the Python env moved from `/opt/vllm` to `/opt/app-root`;
+  anything referencing the old path will break.
 - **Containerfile optimization**: Use `COPY --chown=0:0 --chmod=775` in a single layer instead of separate `COPY` + `RUN chmod`. The two-step approach doubles image size because chmod creates a second full copy of the weights layer.
 - **No route objects**: Routes are not needed for these deployments.
 - **Kustomize for OpenShift**: All `openshift/` dirs use `kustomization.yaml` with `namespace:` set there (not hardcoded in individual resources). ArgoCD points directly at the `openshift/` subdirectory.
@@ -48,4 +60,4 @@ Build must happen on a machine with internet access — the weights are too larg
 - [ ] Push granite and nemotron images to quay.io/danclark
 - [ ] Verify Containerfiles for gpt-oss and qwen use single-layer `COPY --chown --chmod` pattern (avoid doubled image size)
 - [ ] Remove route.yaml from gpt-oss and qwen `openshift/` dirs if still present (routes not needed)
-- [ ] Update READMEs for granite and nemotron to reflect correct HuggingFace repo names (RedHatAI, not ibm-granite/nvidia)
+- [x] Update READMEs for granite and nemotron to reflect correct HuggingFace repo names (RedHatAI, not ibm-granite/nvidia)
