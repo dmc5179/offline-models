@@ -24,7 +24,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: vllm
-          image: image-registry.openshift-image-registry.svc:5000/gpt-oss-inference/gpt-oss-120b-offline:latest
+          image: quay.io/danclark/gpt-oss-120b-offline:latest
           ports:
             - containerPort: 8000
               protocol: TCP

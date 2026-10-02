@@ -24,7 +24,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: vllm
-          image: image-registry.openshift-image-registry.svc:5000/qwen-inference/qwen3-4b-offline:latest
+          image: quay.io/danclark/qwen3-4b-offline:latest
           ports:
             - containerPort: 8000
               protocol: TCP

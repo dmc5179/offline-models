@@ -13,6 +13,8 @@ spec:
             - "0.0.0.0"
             - --port
             - "8000"
+            - --served-model-name
+            - granite-4.0-h-small-fp8
             - --gpu-memory-utilization
             - "0.90"
             - --max-model-len

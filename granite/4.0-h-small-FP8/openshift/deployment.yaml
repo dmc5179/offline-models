@@ -23,7 +23,19 @@ spec:
           type: RuntimeDefault
       containers:
         - name: vllm
-          image: image-registry.openshift-image-registry.svc:5000/granite-inference/granite-4.0-h-small-fp8-offline:latest
+          image: quay.io/danclark/granite-4.0-h-small-fp8-offline:latest
+          args:
+            - /models/granite-4.0-h-small-FP8-dynamic
+            - --host
+            - "0.0.0.0"
+            - --port
+            - "8000"
+            - --served-model-name
+            - granite-4.0-h-small-fp8
+            - --gpu-memory-utilization
+            - "0.90"
+            - --max-model-len
+            - "8192"
           ports:
             - containerPort: 8000
               protocol: TCP
