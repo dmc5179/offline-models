@@ -92,15 +92,13 @@ is read-only and blocks secrets and RBAC objects by default. OLS 1.1 adds a
 Kubernetes MCP server with **write** access gated by human-in-the-loop approval
 (`toolsApprovalConfig.approvalType`) — review that before enabling it.
 
-## One schema inconsistency to verify
+## Two parents, not a typo
 
-The OLS docs show `maxIterations` under `spec.olsConfig` while every other
-setting sits under `spec.ols`. That looks like a documentation error. The stubs
-leave it commented out; confirm against your cluster before using it:
-
-```bash
-oc explain olsconfig.spec --recursive | grep -iE 'maxiterations|introspection'
-```
+`maxIterations` sits under `spec.olsConfig` while `introspectionEnabled` sits
+under `spec.ols`. Confirmed 2026-10-04 against the Configure doc — section
+1.15.1 documents `spec.olsConfig.maxIterations` and section 1.12 documents
+`spec.ols.introspectionEnabled`. Both parents genuinely exist; this is not a
+documentation error, so do not "fix" it by moving one under the other.
 
 ## Why these are not GitOps-managed
 

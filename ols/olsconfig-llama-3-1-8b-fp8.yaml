@@ -90,11 +90,9 @@ spec:
 #             # secret | kubernetes (user bearer token) | client
 #             type: kubernetes
 #
-# maxIterations bounds the tool-call loop. NOTE: the OLS docs show this under
-# spec.olsConfig while every other field above sits under spec.ols. That looks
-# like a documentation inconsistency - confirm against your cluster before
-# relying on it:
-#   oc explain olsconfig.spec --recursive | grep -iE 'maxiterations|introspection'
+# maxIterations bounds the tool-call loop. Confirmed 2026-10-04: it genuinely
+# lives under spec.olsConfig (documented in Configure section 1.15.1), which is
+# a DIFFERENT parent from spec.ols above. Not a doc typo - both parents exist.
 #
 #   olsConfig:
 #     maxIterations: 5
