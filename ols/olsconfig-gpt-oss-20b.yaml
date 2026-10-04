@@ -1,0 +1,100 @@
+# OpenShift Lightspeed - GPT-OSS-20B
+#
+# MoE with ~3.6B active parameters - reasons like a larger model, runs like a small one. Best tool-selection quality per GPU dollar of the five.
+#
+#   Model served as : gpt-oss-20b
+#   Tool-call parser: openai
+#   Minimum GPU     : 24 GB
+#   Model max ctx   : 131,072 tokens (deployments cap --max-model-len at 32768)
+#   Deployed from   : gpt-oss/20B/
+#
+# ---------------------------------------------------------------------------
+# THESE STUBS ARE ALTERNATIVES, NOT ADDITIVE.
+# The OLS operator only reconciles an OLSConfig named "cluster", so exactly one
+# of the files in this directory can be applied at a time. To switch models,
+# replace the whole resource.
+# ---------------------------------------------------------------------------
+#
+# Prerequisites:
+#   1. The model is deployed and its /v1/models endpoint answers with
+#      "gpt-oss-20b" - that string must match spec.llm.providers[].models[].name
+#      below or OLS will not route to it.
+#   2. The Secret below exists, even though an in-cluster endpoint needs no
+#      token. See secret-rhoai-api-keys.yaml.
+#   3. For cluster interaction (pod logs, OpenShift API), deploy the
+#      *-tool-calling* variant. The OLS docs are explicit: "You must enable
+#      tool calling in the LLM provider to activate the cluster interaction
+#      feature."
+#
+# Apply with:
+#   oc apply -f secret-rhoai-api-keys.yaml
+#   oc apply -f olsconfig-gpt-oss-20b.yaml
+
+apiVersion: ols.openshift.io/v1alpha1
+kind: OLSConfig
+metadata:
+  # Fixed. The operator only reconciles an OLSConfig named "cluster".
+  name: cluster
+spec:
+  llm:
+    providers:
+      - name: red_hat_openshift_ai
+        type: rhoai_vllm
+        credentialsSecretRef:
+          name: rhoai-api-keys
+
+        # --- Option A: standalone vLLM Deployment (gpt-oss/20B/standalone-tool-calling) ---
+        # In-cluster Service address. The URL must end in /v1.
+        url: http://gpt-oss-20b.gpt-oss-20b-inference.svc.cluster.local:8000/v1
+
+        # --- Option B: RHOAI LLMInferenceService (gpt-oss/20B/rhoai-tool-calling) ---
+        # Do not guess this address - read it off the resource, then append /v1:
+        #   oc get llminferenceservice gpt-oss-20b -n gpt-oss-20b-inference \
+        #     -o jsonpath='{.status.url}'
+        # url: https://<status.url>/v1
+
+        models:
+          # Must match --served-model-name on the deployment exactly.
+          - name: gpt-oss-20b
+
+  ols:
+    defaultProvider: red_hat_openshift_ai
+    defaultModel: gpt-oss-20b
+
+    # Cluster interaction via the built-in Observability MCP server.
+    # Default is true; shown explicitly so the intent is visible in git.
+    # Read-only, and secrets/RBAC objects are blocked by default.
+    #
+    # TECHNOLOGY PREVIEW: "The cluster interaction feature is a Technology
+    # Preview feature only. Technology Preview features are not supported with
+    # Red Hat production service level agreements (SLAs)."
+    introspectionEnabled: true
+
+    # If the endpoint is https with a private CA, add the CA here:
+    # additionalCAConfigMapRef:
+    #   name: trusted-certs
+
+# --- Optional: additional MCP servers --------------------------------------
+# Only needed to reach MCP servers beyond the built-in Observability one.
+# Also Technology Preview.
+#
+#   featureGates:
+#     - MCPServer
+#   mcpServers:
+#     - name: mcp-server-1
+#       url: https://mcp.example.com
+#       timeout: 30
+#       headers:
+#         - name: Authorization
+#           valueFrom:
+#             # secret | kubernetes (user bearer token) | client
+#             type: kubernetes
+#
+# maxIterations bounds the tool-call loop. NOTE: the OLS docs show this under
+# spec.olsConfig while every other field above sits under spec.ols. That looks
+# like a documentation inconsistency - confirm against your cluster before
+# relying on it:
+#   oc explain olsconfig.spec --recursive | grep -iE 'maxiterations|introspection'
+#
+#   olsConfig:
+#     maxIterations: 5

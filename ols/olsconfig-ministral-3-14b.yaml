@@ -1,0 +1,100 @@
+# OpenShift Lightspeed - Ministral 3 14B Instruct
+#
+# Largest context window of the five and more parameters for tool selection, still on a 24 GB card.
+#
+#   Model served as : ministral-3-14b
+#   Tool-call parser: mistral
+#   Minimum GPU     : 24 GB
+#   Model max ctx   : 262,144 tokens (deployments cap --max-model-len at 32768)
+#   Deployed from   : ministral/3-14B/
+#
+# ---------------------------------------------------------------------------
+# THESE STUBS ARE ALTERNATIVES, NOT ADDITIVE.
+# The OLS operator only reconciles an OLSConfig named "cluster", so exactly one
+# of the files in this directory can be applied at a time. To switch models,
+# replace the whole resource.
+# ---------------------------------------------------------------------------
+#
+# Prerequisites:
+#   1. The model is deployed and its /v1/models endpoint answers with
+#      "ministral-3-14b" - that string must match spec.llm.providers[].models[].name
+#      below or OLS will not route to it.
+#   2. The Secret below exists, even though an in-cluster endpoint needs no
+#      token. See secret-rhoai-api-keys.yaml.
+#   3. For cluster interaction (pod logs, OpenShift API), deploy the
+#      *-tool-calling* variant. The OLS docs are explicit: "You must enable
+#      tool calling in the LLM provider to activate the cluster interaction
+#      feature."
+#
+# Apply with:
+#   oc apply -f secret-rhoai-api-keys.yaml
+#   oc apply -f olsconfig-ministral-3-14b.yaml
+
+apiVersion: ols.openshift.io/v1alpha1
+kind: OLSConfig
+metadata:
+  # Fixed. The operator only reconciles an OLSConfig named "cluster".
+  name: cluster
+spec:
+  llm:
+    providers:
+      - name: red_hat_openshift_ai
+        type: rhoai_vllm
+        credentialsSecretRef:
+          name: rhoai-api-keys
+
+        # --- Option A: standalone vLLM Deployment (ministral/3-14B/standalone-tool-calling) ---
+        # In-cluster Service address. The URL must end in /v1.
+        url: http://ministral-3-14b.ministral-3-14b-inference.svc.cluster.local:8000/v1
+
+        # --- Option B: RHOAI LLMInferenceService (ministral/3-14B/rhoai-tool-calling) ---
+        # Do not guess this address - read it off the resource, then append /v1:
+        #   oc get llminferenceservice ministral-3-14b -n ministral-3-14b-inference \
+        #     -o jsonpath='{.status.url}'
+        # url: https://<status.url>/v1
+
+        models:
+          # Must match --served-model-name on the deployment exactly.
+          - name: ministral-3-14b
+
+  ols:
+    defaultProvider: red_hat_openshift_ai
+    defaultModel: ministral-3-14b
+
+    # Cluster interaction via the built-in Observability MCP server.
+    # Default is true; shown explicitly so the intent is visible in git.
+    # Read-only, and secrets/RBAC objects are blocked by default.
+    #
+    # TECHNOLOGY PREVIEW: "The cluster interaction feature is a Technology
+    # Preview feature only. Technology Preview features are not supported with
+    # Red Hat production service level agreements (SLAs)."
+    introspectionEnabled: true
+
+    # If the endpoint is https with a private CA, add the CA here:
+    # additionalCAConfigMapRef:
+    #   name: trusted-certs
+
+# --- Optional: additional MCP servers --------------------------------------
+# Only needed to reach MCP servers beyond the built-in Observability one.
+# Also Technology Preview.
+#
+#   featureGates:
+#     - MCPServer
+#   mcpServers:
+#     - name: mcp-server-1
+#       url: https://mcp.example.com
+#       timeout: 30
+#       headers:
+#         - name: Authorization
+#           valueFrom:
+#             # secret | kubernetes (user bearer token) | client
+#             type: kubernetes
+#
+# maxIterations bounds the tool-call loop. NOTE: the OLS docs show this under
+# spec.olsConfig while every other field above sits under spec.ols. That looks
+# like a documentation inconsistency - confirm against your cluster before
+# relying on it:
+#   oc explain olsconfig.spec --recursive | grep -iE 'maxiterations|introspection'
+#
+#   olsConfig:
+#     maxIterations: 5
