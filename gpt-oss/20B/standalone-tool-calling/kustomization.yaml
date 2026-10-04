@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../standalone
+
+# Adds the tool-calling flags documented for this model family in
+# "Extending Red Hat AI Inference with tool calling capabilities" (RHAII 3.5).
+patches:
+  - target:
+      kind: Deployment
+      name: gpt-oss-20b
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/args
+        value:
+          - --model=/mnt/models
+          - --served-model-name=gpt-oss-20b
+          - --host=0.0.0.0
+          - --port=8000
+          - --max-model-len=32768
+          - --gpu-memory-utilization=0.90
+          - --enable-auto-tool-choice
+          - --tool-call-parser=openai

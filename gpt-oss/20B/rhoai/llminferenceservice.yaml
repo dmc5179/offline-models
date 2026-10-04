@@ -1,0 +1,51 @@
+# RHOAI 3.5 Distributed Inference with llm-d.
+#
+# apiVersion: RHAII 3.5 and KB 7141739 both document v1alpha2; the RHOAI 3.5
+# book shows v1alpha1 in some examples. Confirm against your cluster before
+# applying:
+#   oc get crd llminferenceservices.serving.kserve.io \
+#     -o jsonpath='{.spec.versions[*].name}'
+apiVersion: serving.kserve.io/v1alpha2
+kind: LLMInferenceService
+metadata:
+  name: gpt-oss-20b
+  labels:
+    app: gpt-oss-20b
+spec:
+  model:
+    # OCI is a documented URI scheme alongside s3://, pvc:// and hf://
+    uri: oci://registry.redhat.io/rhelai1/modelcar-gpt-oss-20b:1.5
+    name: gpt-oss-20b
+  replicas: 1
+  router:
+    scheduler: {}
+    route: {}
+    gateway: {}
+  template:
+    containers:
+      - name: main
+        args:
+          - --model=/mnt/models
+          - --served-model-name=gpt-oss-20b
+          - --host=0.0.0.0
+          - --port=8000
+          - --max-model-len=32768
+          - --gpu-memory-utilization=0.90
+        resources:
+          limits:
+            cpu: "4"
+            memory: 32Gi
+            nvidia.com/gpu: "1"
+          requests:
+            cpu: "2"
+            memory: 24Gi
+            nvidia.com/gpu: "1"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+            scheme: HTTPS
+          initialDelaySeconds: 120
+          periodSeconds: 30
+          timeoutSeconds: 30
+          failureThreshold: 5

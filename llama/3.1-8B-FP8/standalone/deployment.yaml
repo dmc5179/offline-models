@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llama-3-1-8b-fp8
+  labels:
+    app: llama-3-1-8b-fp8
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: llama-3-1-8b-fp8
+  template:
+    metadata:
+      labels:
+        app: llama-3-1-8b-fp8
+    spec:
+      serviceAccountName: vllm-modelcar
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: vllm
+          image: registry.redhat.io/rhaiis/vllm-cuda-rhel9:3.3.3
+          args:
+            - --model=/mnt/models
+            - --served-model-name=llama-3-1-8b-fp8
+            - --host=0.0.0.0
+            - --port=8000
+            - --max-model-len=32768
+            - --gpu-memory-utilization=0.90
+          ports:
+            - containerPort: 8000
+              protocol: TCP
+          env:
+            - name: HF_HUB_OFFLINE
+              value: "1"
+            - name: TRANSFORMERS_OFFLINE
+              value: "1"
+          resources:
+            limits:
+              nvidia.com/gpu: "1"
+              memory: 28Gi
+            requests:
+              nvidia.com/gpu: "1"
+              memory: 20Gi
+              cpu: "4"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            runAsNonRoot: true
+          volumeMounts:
+            # ModelCar stores weights at /models; subPath lands them at /mnt/models
+            - name: model
+              mountPath: /mnt/models
+              subPath: models
+              readOnly: true
+            - name: shm
+              mountPath: /dev/shm
+          startupProbe:
+            httpGet: {path: /health, port: 8000}
+            periodSeconds: 30
+            failureThreshold: 24
+          readinessProbe:
+            httpGet: {path: /health, port: 8000}
+            initialDelaySeconds: 60
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /health, port: 8000}
+            initialDelaySeconds: 120
+            periodSeconds: 15
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      volumes:
+        - name: model
+          image:
+            reference: registry.redhat.io/rhelai1/modelcar-llama-3-1-8b-instruct-fp8-dynamic:1.5
+            pullPolicy: IfNotPresent
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Gi

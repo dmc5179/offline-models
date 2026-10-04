@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: llama-3-1-8b-inference
+
+# scc.yaml is deliberately NOT included: it is cluster-scoped and only needed
+# if your OCP 4.21.z rejects the image volume type. See README.md.
+resources:
+  - serviceaccount.yaml
+  - role.yaml
+  - rolebinding.yaml
+  - deployment.yaml
+  - service.yaml

@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ministral-3-14b
+  labels:
+    app: ministral-3-14b
+spec:
+  selector:
+    app: ministral-3-14b
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  type: ClusterIP

@@ -1,0 +1,36 @@
+# Only needed if your OCP 4.21.z rejects `image` volumes with:
+#   "image volumes are not allowed to be used"
+# The SCC fix landed in 4.20.15 (RHBA-2026:2987) and 4.22 (OCPBUGS-65807);
+# 4.21 is undocumented either way, so test first.
+#
+#   oc apply -f scc.yaml
+#   oc adm policy add-scc-to-user vllm-image-volume -z vllm-modelcar -n llama-3-1-8b-inference
+#
+# Never edit the built-in SCCs.
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: vllm-image-volume
+allowPrivilegeEscalation: false
+allowPrivilegedContainer: false
+requiredDropCapabilities:
+  - ALL
+runAsUser:
+  type: MustRunAsRange
+seLinuxContext:
+  type: MustRunAs
+fsGroup:
+  type: RunAsAny
+supplementalGroups:
+  type: RunAsAny
+seccompProfiles:
+  - runtime/default
+priority: 10
+volumes:
+  - configMap
+  - downwardAPI
+  - emptyDir
+  - persistentVolumeClaim
+  - projected
+  - secret
+  - image
