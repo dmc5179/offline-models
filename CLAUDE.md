@@ -55,6 +55,18 @@ Two traps this avoids, both of which produced badly wrong numbers before:
 The method is validated against a known-good figure: `granite-4.0-h-small-FP8-dynamic` measures
 32.7 GB across 7 shards, matching the independently-derived ~33 GB in the GPU sizing research doc.
 
+**ModelCar columns.** `redhat_modelcar` is the full registry path to mirror (48 of 99 buildable
+models have one); `modelcar_gb` is the compressed image size summed from the registry manifest's
+layer sizes — the amd64 entry for multi-arch indexes; `modelcar_arch` lists the platforms the
+image publishes. All were read from the registry manifest without pulling. Every ModelCar
+referenced here supports amd64.
+
+Reproduce without pulling:
+```bash
+skopeo inspect --raw docker://<image> | jq -r '.manifests[].platform | "\(.os)/\(.architecture)"'  # multi-arch
+skopeo inspect docker://<image> | jq -r '.Architecture'                                            # single-manifest
+```
+
 Caveats when reading the CSV:
 - Red Hat's own table is case-inconsistent (`FP8-Dynamic` vs `FP8-dynamic`); matching is case-insensitive
   and `red_hat_model_id` shows the exact doc spelling.
@@ -67,6 +79,77 @@ Caveats when reading the CSV:
   (e.g. `granite-4.0-h-small-FP8-dynamic` is Validated; plain `granite-4.0-h-small` is not listed).
 - `RedHatAI/Llama-3.1-8B-Instruct-essential` is in the candidate list but the HF repo is not
   accessible (404). The `gpt-oss-*-essential` repos do exist.
+
+## Two sourcing models
+
+This repo now contains two different ways to get a model onto a cluster. Do not mix them for
+the same model.
+
+**1. Build your own image** (`<family>/<variant>/Containerfile` + `build.sh` + `openshift/`).
+Weights are baked into a vLLM runtime image. Self-contained, but the image must be rebuilt
+whenever the base image gets a CVE fix, and you own the FIPS surface.
+
+**2. Red Hat ModelCar** (`<family>/<variant>/{standalone,rhoai}/`). Weights come from Red Hat's
+published ModelCar OCI image; the runtime is Red Hat's. No build step. 48 of the 99 buildable
+models already have one — see the `redhat_modelcar` column.
+
+Five models are set up the ModelCar way, chosen as OpenShift Lightspeed candidates:
+`gpt-oss/20B`, `qwen/8B-FP8`, `ministral/3-14B`, `llama/3.1-8B-FP8`, `granite/4.0-h-small-FP8`.
+Each has four variants — `standalone/`, `standalone-tool-calling/`, `rhoai/`,
+`rhoai-tool-calling/` — and is deployed via the ApplicationSets in `argocd/`.
+
+**ModelCar images can be much larger than the GPU footprint.** Mirror by `modelcar_gb`, not
+`weights_gb`. Five models carry a significant penalty:
+
+| Model | Image | Weights | Factor |
+|---|---|---|---|
+| gpt-oss-120b | 195.8 GB | 65.2 GB | 3.0x |
+| gpt-oss-20b | 41.3 GB | 13.8 GB | 3.0x |
+| Mistral-Small-24B-Instruct-2501 | 94.3 GB | 47.1 GB | 2.0x |
+| Ministral-3-14B-Instruct-2512 | 31.5 GB | 15.7 GB | 2.0x |
+| Voxtral-Mini-3B-2507-FP8-dynamic | 12.3 GB | 6.1 GB | 2.0x |
+
+The 2x cases ship two copies of the weights (HF-sharded plus Mistral-native
+`consolidated.safetensors`). The 3x gpt-oss cases carry additional checkpoint formats.
+Everything else is within ~1.1x of its weight size.
+
+### RHOAI 3.5 serving
+
+`LLMInferenceService` (`serving.kserve.io/v1alpha2`, shortName `llmisvc`) replaces the
+InferenceService+ServingRuntime pattern for vLLM. Supports `oci://` alongside `s3://`, `pvc://`
+and `hf://`. Base Distributed Inference with llm-d is GA; the topology selector is Tech Preview.
+Plain `InferenceService` *"remain[s] fully supported."*
+
+- vLLM args go in `spec.template.containers[].args`; `spec.model` has only `uri` and `name`.
+- `imagePullSecrets` is **not** needed on OpenShift — the cluster-wide pull secret covers it.
+- **apiVersion conflict:** RHAII 3.5 and KB 7141739 document `v1alpha2`; some RHOAI 3.5 examples
+  show `v1alpha1`. Verify with
+  `oc get crd llminferenceservices.serving.kserve.io -o jsonpath='{.spec.versions[*].name}'`.
+- Prereqs: OCP 4.19.9+, no Service Mesh v2, a `GatewayClass` plus a Gateway named
+  `openshift-ai-inference` in `openshift-ingress`, and the `llmdTemplates` feature flag.
+
+### Tool calling (required for OLS cluster interaction)
+
+Per-model flags come from *Extending Red Hat AI Inference with tool calling capabilities* (3.5),
+which has dedicated chapters for Llama 3.1, Qwen 3, Ministral 3 and gpt-oss:
+
+| Model | Parser | Extra flags |
+|---|---|---|
+| gpt-oss-20b | `openai` | — |
+| Qwen3-8B | `hermes` | — |
+| Ministral-3-14B | `mistral` | `--tokenizer-mode/--config-format/--load-format=mistral` |
+| Llama-3.1-8B | `llama3_json` | **requires** `--chat-template=/opt/app-root/template/tool_chat_template_llama3.1_json.jinja` |
+| granite-4.0-h-* | `granite4` | — (Granite 3.x uses `granite`) |
+
+Gemma has no parser in 3.5 either — the Gemma builds still have no tool-calling path.
+
+### The `image` volume caveat for standalone
+
+`standalone/` mounts the ModelCar with a Kubernetes `image` volume. That type was rejected by the
+built-in SCCs until the fix in OCP **4.20.15** (RHBA-2026:2987) and **4.22** (OCPBUGS-65807);
+**4.21 is undocumented either way**. Each standalone dir ships an unreferenced `scc.yaml` to apply
+if you hit `image volumes are not allowed to be used`. The documented fallback is an `oras pull`
+initContainer into a PVC, which copies the full image per pod start.
 
 ## Build & Push
 
