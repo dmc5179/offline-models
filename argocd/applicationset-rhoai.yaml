@@ -1,0 +1,71 @@
+# Deploys each model as an LLMInferenceService on RHOAI 3.5 (Distributed
+# Inference with llm-d), sourcing weights from Red Hat's published ModelCar
+# OCI images via the oci:// URI scheme.
+#
+# Switch a model to the tool-calling variant by changing its `path` from
+# <model>/rhoai to <model>/rhoai-tool-calling. Tool calling is required for
+# OpenShift Lightspeed's cluster-interaction feature.
+#
+# Prerequisites (RHOAI 3.5 Distributed Inference with llm-d):
+#   - OpenShift 4.19.9 or later
+#   - OpenShift Service Mesh v2 must NOT be installed
+#   - A GatewayClass, and a Gateway named `openshift-ai-inference` in the
+#     `openshift-ingress` namespace
+#   - `llmdTemplates` feature flag enabled in OdhDashboardConfig
+#   - NVIDIA GPU Operator and Node Feature Discovery
+#
+# imagePullSecrets are intentionally absent: on OpenShift the cluster-wide
+# pull secret handles registry.redhat.io authentication for these images.
+#
+# NOTE ON apiVersion: the manifests use serving.kserve.io/v1alpha2, which is
+# what RHAII 3.5 and KB 7141739 document. Some RHOAI 3.5 examples show
+# v1alpha1. Verify before first sync:
+#   oc get crd llminferenceservices.serving.kserve.io -o jsonpath='{.spec.versions[*].name}'
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: vllm-models-rhoai
+  namespace: openshift-gitops
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - list:
+        elements:
+          - name: gpt-oss-20b
+            path: gpt-oss/20B/rhoai
+            namespace: gpt-oss-20b-inference
+          - name: qwen3-8b-fp8
+            path: qwen/8B-FP8/rhoai
+            namespace: qwen3-8b-inference
+          - name: ministral-3-14b
+            path: ministral/3-14B/rhoai
+            namespace: ministral-3-14b-inference
+          - name: llama-3-1-8b-fp8
+            path: llama/3.1-8B-FP8/rhoai
+            namespace: llama-3-1-8b-inference
+          - name: granite-4-0-h-small-fp8
+            path: granite/4.0-h-small-FP8/rhoai
+            namespace: granite-4-0-h-small-car-inference
+  template:
+    metadata:
+      name: '{{.name}}-rhoai'
+      labels:
+        model: '{{.name}}'
+        serving: rhoai
+    spec:
+      project: default
+      source:
+        # Change this to wherever ArgoCD can reach this repository.
+        repoURL: https://github.com/dmc5179/offline-models.git
+        targetRevision: main
+        path: '{{.path}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{.namespace}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true

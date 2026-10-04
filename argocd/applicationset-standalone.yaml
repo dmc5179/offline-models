@@ -1,0 +1,62 @@
+# Deploys each model as a plain vLLM Deployment that consumes a Red Hat
+# ModelCar OCI image. No KServe, no RHOAI - just the RHAIIS runtime image plus
+# an `image` volume carrying the weights.
+#
+# Use this when you want model serving without taking a dependency on RHOAI,
+# or to A/B a model before committing to a ServingRuntime.
+#
+# Prerequisites:
+#   - NVIDIA GPU Operator and Node Feature Discovery installed
+#   - A pull secret for registry.redhat.io in each target namespace (or a
+#     global pull secret), since both the runtime image and the ModelCar
+#     come from registry.redhat.io
+#   - `image` volume type permitted by SCC - see each model's
+#     standalone/scc.yaml if your OCP 4.21.z rejects it
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: vllm-models-standalone
+  namespace: openshift-gitops
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - list:
+        elements:
+          - name: gpt-oss-20b
+            path: gpt-oss/20B/standalone
+            namespace: gpt-oss-20b-inference
+          - name: qwen3-8b-fp8
+            path: qwen/8B-FP8/standalone
+            namespace: qwen3-8b-inference
+          - name: ministral-3-14b
+            path: ministral/3-14B/standalone
+            namespace: ministral-3-14b-inference
+          - name: llama-3-1-8b-fp8
+            path: llama/3.1-8B-FP8/standalone
+            namespace: llama-3-1-8b-inference
+          - name: granite-4-0-h-small-fp8
+            path: granite/4.0-h-small-FP8/standalone
+            namespace: granite-4-0-h-small-car-inference
+  template:
+    metadata:
+      name: '{{.name}}-standalone'
+      labels:
+        model: '{{.name}}'
+        serving: standalone
+    spec:
+      project: default
+      source:
+        # Change this to wherever ArgoCD can reach this repository.
+        repoURL: https://github.com/dmc5179/offline-models.git
+        targetRevision: main
+        path: '{{.path}}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{.namespace}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
