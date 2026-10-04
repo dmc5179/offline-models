@@ -1,0 +1,12 @@
+# Model weights downloaded by build.sh (LOCAL_DIR). Never commit these -
+# individual checkpoints in this repo range from 0.5 GB to 800 GB.
+model/
+qwen-model/
+*.safetensors
+*.gguf
+*.bin
+
+# Registry credentials
+auth.json
+*pull-secret*.json
+.dockerconfigjson
