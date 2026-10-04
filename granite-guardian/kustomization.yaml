@@ -2,8 +2,4 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
-  - granite
-  - nemotron
-  - granite-guardian
-  - qwen3-embedding
-  - gemma
+  - 3.2-5B

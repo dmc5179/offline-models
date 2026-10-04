@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: gemma-3-12b-it
+  labels:
+    app: gemma-3-12b-it
+spec:
+  selector:
+    app: gemma-3-12b-it
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  type: ClusterIP

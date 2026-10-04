@@ -1,0 +1,18 @@
+FROM registry.redhat.io/rhaiis/vllm-cuda-rhel9:3.3.3
+
+USER 0
+
+ENV MODEL_PATH=/models/gemma-4-26B-A4B-it-FP8-dynamic \
+    HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1 \
+    HF_HUB_DISABLE_TELEMETRY=1 \
+    VLLM_NO_USAGE_STATS=1
+
+COPY --chown=0:0 --chmod=775 ./model ${MODEL_PATH}
+
+USER 1001
+
+EXPOSE 8000
+
+ENTRYPOINT ["vllm", "serve"]
+CMD ["/models/gemma-4-26B-A4B-it-FP8-dynamic", "--host", "0.0.0.0", "--port", "8000", "--served-model-name", "gemma-4-26b-a4b-it-fp8", "--max-model-len", "8192", "--gpu-memory-utilization", "0.90"]
