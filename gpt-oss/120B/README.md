@@ -1,6 +1,6 @@
 # GPT-OSS-120B Offline Inference Container
 
-Air-gapped vLLM serving of [openai/gpt-oss-120b](https://huggingface.co/openai/gpt-oss-120b) using the Red Hat AI Inference Server (`rhaiis/vllm-cuda-rhel9`). The model weights are baked into the container image so no network access is required at runtime.
+Air-gapped vLLM serving of [RedHatAI/gpt-oss-120b](https://huggingface.co/RedHatAI/gpt-oss-120b) using the Red Hat AI Inference Server (`rhaiis/vllm-cuda-rhel9`). The model weights are baked into the container image so no network access is required at runtime.
 
 GPT-OSS-120B is OpenAI's open-weight Mixture-of-Experts model (117B total params, 5.1B active per token) released under Apache 2.0. It ships with MXFP4 quantization of MoE weights, fitting on a single 80GB GPU (H100/MI300X).
 
@@ -26,7 +26,7 @@ chmod +x build.sh
 
 What it does:
 
-1. Downloads `openai/gpt-oss-120b` (~60 GB) to `./model/`
+1. Downloads `RedHatAI/gpt-oss-120b` (~65 GB) to `./model/`
 2. Builds the container image `gpt-oss-120b-offline:latest`
 
 The resulting image bundles the weights at `/models/gpt-oss-120b` and sets `HF_HUB_OFFLINE=1` and `TRANSFORMERS_OFFLINE=1` so vLLM never attempts to reach HuggingFace.

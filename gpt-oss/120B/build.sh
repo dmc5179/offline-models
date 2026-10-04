@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-MODEL_REPO="openai/gpt-oss-120b"
+MODEL_REPO="RedHatAI/gpt-oss-120b"
 LOCAL_DIR="./model"
 REGISTRY="${REGISTRY:-quay.io/danclark}"
 IMAGE_NAME="gpt-oss-120b-offline"
