@@ -120,11 +120,36 @@ InferenceService+ServingRuntime pattern for vLLM. Supports `oci://` alongside `s
 and `hf://`. Base Distributed Inference with llm-d is GA; the topology selector is Tech Preview.
 Plain `InferenceService` *"remain[s] fully supported."*
 
-- vLLM args go in `spec.template.containers[].args`; `spec.model` has only `uri` and `name`.
-- `imagePullSecrets` is **not** needed on OpenShift — the cluster-wide pull secret covers it.
-- **apiVersion conflict:** RHAII 3.5 and KB 7141739 document `v1alpha2`; some RHOAI 3.5 examples
-  show `v1alpha1`. Verify with
-  `oc get crd llminferenceservices.serving.kserve.io -o jsonpath='{.spec.versions[*].name}'`.
+- vLLM args go in `spec.template.containers[].args`. `spec.model` has only `uri`, `name`, `lora`
+  and `confidential`; `uri` is **required** and is an unconstrained string — no scheme enum — so
+  `oci://` passes admission. Whether it resolves is up to the storage initializer at runtime.
+- `imagePullSecrets` is **not** needed for the model. Verified: `spec.storageInitializer` exposes
+  only `enabled`, with no credentials field, so the ModelCar pull relies on the cluster-wide pull
+  secret. The `imagePullSecrets` in Red Hat's examples live at
+  `spec.router.scheduler.template.imagePullSecrets` and `spec.template.imagePullSecrets` — those
+  authenticate the **scheduler** and **vLLM runtime** images, not the model.
+- `router: {scheduler: {}, route: {}, gateway: {}}` is valid. `scheduler` has no required children
+  (`annotations`, `config`, `labels`, `pool`, `replicas`, `template`, `tokenizer` are all
+  optional), so an empty object passes.
+
+**apiVersion — resolved 2026-10-04 against a live CRD.** The CRD serves **both** `v1alpha1` and
+`v1alpha2`. The two books are not contradicting each other; they document different versions:
+
+| | RHOAI 3.5 book | RHAII 3.5 book + KB 7141739 |
+|---|---|---|
+| apiVersion | `v1alpha1` | `v1alpha2` |
+| template location | `spec.router.template` | `spec.template` |
+| `router.scheduler` | `{}` | populated with a `template` |
+| `imagePullSecrets` | absent | present (scheduler + runtime pods) |
+| vLLM args | `VLLM_ADDITIONAL_ARGS` env var | `containers[].args` list |
+
+This repo targets **`v1alpha2`**. Verified top-level `spec` children: `annotations`, `baseRefs`,
+`kvCacheOffloading`, `labels`, `model`, `parallelism`, `prefill`, `replicas`, `router`, `scaling`,
+`storageInitializer`, `template`, `tracing`, `worker`. Do not mix shapes across versions —
+declaring `v1alpha2` and then borrowing v1alpha1 nesting produces a CR that fails validation.
+
+Caveat: **`oci://` is documented but never demonstrated.** Both books list the four schemes
+(`s3://`, `pvc://`, `oci://`, `hf://`), but every worked example in either book uses `hf://`.
 - Prereqs: OCP 4.19.9+, no Service Mesh v2, a `GatewayClass` plus a Gateway named
   `openshift-ai-inference` in `openshift-ingress`, and the `llmdTemplates` feature flag.
 
@@ -147,9 +172,19 @@ Gemma has no parser in 3.5 either — the Gemma builds still have no tool-callin
 
 `standalone/` mounts the ModelCar with a Kubernetes `image` volume. That type was rejected by the
 built-in SCCs until the fix in OCP **4.20.15** (RHBA-2026:2987) and **4.22** (OCPBUGS-65807);
-**4.21 is undocumented either way**. Each standalone dir ships an unreferenced `scc.yaml` to apply
-if you hit `image volumes are not allowed to be used`. The documented fallback is an `oras pull`
-initContainer into a PVC, which copies the full image per pod start.
+**4.21 still has no statement either way**. Each standalone dir ships an unreferenced `scc.yaml`
+to apply if you hit `image volumes are not allowed to be used`. The documented fallback is an
+`oras pull` initContainer into a PVC, which copies the full image per pod start.
+
+Rechecked 2026-10-04. The evidence improved but did not close:
+- OCP 4.21 *Nodes* §2.11 "Mounting an OCI image into a pod" exists with **no Technology Preview
+  label** — it sits in the mainline book, not a preview chapter.
+- Solution 7136646 is scoped to **4.20** and is the SCC rejection.
+- Solution 7143096 was retitled to **4.22** and is a **PodSecurity** violation, not SCC — and its
+  fix is exactly the `securityContext` block these deployments already set. So by 4.22 the SCC
+  problem is gone and only PodSecurity remains, which we satisfy.
+- No 4.21-specific SCC article exists, which is suggestive but is absence of evidence.
+Still needs one `oc apply` on the target 4.21.z to settle.
 
 ## Build & Push
 
@@ -209,6 +244,10 @@ Build must happen on a machine with internet access — the weights are too larg
   Two important qualifications:
   - **RHOAI is silent.** No statement — positive or negative — exists for Red Hat OpenShift AI model
     serving (vLLM ServingRuntime / KServe) on FIPS-enabled clusters, for 2.x or 3.x. Do not infer support.
+    Re-confirmed 2026-10-04 against a refreshed index: the *Supported Configurations for 3.x* article
+    now carries a detailed per-component matrix (OCP 4.19.9+/4.20/4.21/4.22; llm-d GA 0.9.0; KServe
+    GA 0.19.0; Red Hat AI Inference GA 3.5.0) and still has **no FIPS row or mention**. Open a
+    support case rather than inferring. That article also confirms RHOAI 3.5 supports OCP 4.21.
   - **"FIPS compliant" ≠ "FIPS validated."** For Red Hat products "compliant" means *Designed for FIPS*:
     calling RHEL crypto modules submitted for FIPS-140 validation. RHEL 9 modules were submitted for
     FIPS 140-3 (CMVP review); RHEL 8's 140-2 validations remain active through 2026-09-21. The validation
@@ -251,5 +290,15 @@ Build must happen on a machine with internet access — the weights are too larg
 - [ ] Verify Containerfiles for gpt-oss and qwen use single-layer `COPY --chown --chmod` pattern (avoid doubled image size)
 - [ ] Remove route.yaml from gpt-oss and qwen `openshift/` dirs if still present (routes not needed)
 - [x] Update READMEs for granite and nemotron to reflect correct HuggingFace repo names (RedHatAI, not ibm-granite/nvidia)
+- [x] ~~Resolve the LLMInferenceService apiVersion conflict~~ **Closed 2026-10-04** — CRD serves both
+      v1alpha1 and v1alpha2; the books document different versions, not conflicting advice. Repo
+      targets v1alpha2 and the manifests match its verified schema.
+- [x] ~~Determine whether imagePullSecrets is needed for the ModelCar~~ **Closed 2026-10-04** —
+      spec.storageInitializer has only `enabled`, no credentials. Cluster-wide pull secret covers it.
 - [ ] Verify Gemma 3/4 architecture registration in the GA image before downloading Gemma weights
 - [ ] Confirm `layer_types` in gemma-3-12b-it config once downloaded (sliding-window ratio assumed)
+- [ ] Test an `image` volume pod on the target OCP 4.21.z — the only remaining way to settle whether
+      the built-in SCCs permit it (fixed in 4.20.15 and 4.22; 4.21 undocumented)
+- [ ] Open a support case for RHOAI on FIPS-enabled clusters — docs confirmed silent, twice
+- [ ] Confirm `modelcar-llama-3-1-8b-instruct-fp8-dynamic:1.5` is the same artifact as
+      `RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8-dynamic` (currently a name-based inference)

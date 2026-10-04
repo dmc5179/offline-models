@@ -1,10 +1,13 @@
 # RHOAI 3.5 Distributed Inference with llm-d.
 #
-# apiVersion: RHAII 3.5 and KB 7141739 both document v1alpha2; the RHOAI 3.5
-# book shows v1alpha1 in some examples. Confirm against your cluster before
-# applying:
-#   oc get crd llminferenceservices.serving.kserve.io \
-#     -o jsonpath='{.spec.versions[*].name}'
+# apiVersion verified against a live CRD, 2026-10-04. The cluster serves BOTH
+# v1alpha1 and v1alpha2, and the two Red Hat books document DIFFERENT versions
+# rather than contradicting each other:
+#   RHOAI 3.5 book  -> v1alpha1 (template nested under spec.router)
+#   RHAII 3.5 book  -> v1alpha2 (template at spec.template)  <- this file
+# Confirmed present in v1alpha2: spec.template, spec.model.uri (required),
+# spec.replicas, spec.router. scheduler has no required children, so
+# `scheduler: {}` is valid.
 apiVersion: serving.kserve.io/v1alpha2
 kind: LLMInferenceService
 metadata:
