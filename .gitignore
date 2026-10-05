@@ -13,3 +13,6 @@ auth.json
 
 # Editor lock files - LibreOffice leaves these beside an open .csv
 .~lock.*#
+
+# Batch build logs
+logs/

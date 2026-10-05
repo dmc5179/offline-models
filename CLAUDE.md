@@ -199,6 +199,46 @@ Rechecked 2026-10-04. The evidence improved but did not close:
 - No 4.21-specific SCC article exists, which is suggestive but is absence of evidence.
 Still needs one `oc apply` on the target 4.21.z to settle.
 
+## Mirror or build?
+
+Ten directories have a `build.sh`, but only five of them need to be built. The rest have a Red Hat
+ModelCar, which is cheaper to obtain, needs no rebuild when the base image gets a CVE fix, and
+moves the FIPS surface onto Red Hat's runtime.
+
+| Build dir | ModelCar | Action |
+|---|---|---|
+| `gpt-oss/120B` | `rhelai1/modelcar-gpt-oss-120b:1.5` | **mirror** — build avoidable |
+| `granite/4.0-h-small-FP8` | `rhai/modelcar-granite-4-0-h-small-fp8-dynamic:3.0` | **mirror** — build avoidable |
+| `nemotron/70B-FP8` | `rhelai1/modelcar-llama-3-1-nemotron-70b-instruct-hf-fp8-dynamic:1.5` | **mirror** — build avoidable |
+| `granite-guardian/3.2-5B` | none | **build** |
+| `qwen3-embedding/8B` | none | **build** |
+| `gemma/3-12B-it` | none | **build** |
+| `gemma/4-26B-A4B-FP8` | none | **build** |
+| `gemma/4-31B-FP8` | none | **build** |
+| `qwen/32B`, `qwen/3.8B` | none | **build**, but these are upstream `Qwen/` repos with no Red Hat support statement |
+
+The build directories for the three mirrorable models are kept rather than deleted: building gives
+you an image in your own registry under your own tag, which some disconnected workflows want for
+provenance. Mirroring is the cheaper default.
+
+Do not confuse the two groups of five. The **five OLS candidates** (`ols_candidate` 1–5) all ship
+as ModelCars and need **no build at all**. The **five unbuilt models** above are a different set.
+
+### Overnight batch build
+
+`hack/batch-build.sh` builds and pushes exactly the five that have no ModelCar:
+
+```bash
+./hack/batch-build.sh --authfile ~/quay-pull-secret.json --clean-weights --shutdown
+```
+
+Every preflight check — credentials, `HF_TOKEN`, base-image reachability, each `build.sh`, disk
+headroom, and passwordless sudo if `--shutdown` was passed — runs **before** the first download, so
+a bad flag fails in seconds rather than eight hours in. Models build smallest-first; a failure in
+one does not abandon the rest. After each successful push the local image is removed, and with
+`--clean-weights` the downloaded weights are too — without that flag the run needs roughly twice
+the disk. Logs go to `logs/` (gitignored).
+
 ## Build & Push
 
 All build scripts default `REGISTRY=quay.io/danclark`. Override with `REGISTRY=other.registry.io/org ./build.sh`.
@@ -298,8 +338,10 @@ Build must happen on a machine with internet access — the weights are too larg
 
 ## TODO
 
-- [ ] Build + push the 5 Enabled models (granite-guardian, qwen3-embedding, 3x gemma) and granite/nemotron — on a machine with bandwidth
-- [ ] Push granite and nemotron images to quay.io/danclark
+- [ ] Build + push the 5 models that have **no ModelCar alternative** — run
+      `./hack/batch-build.sh --authfile <path> --clean-weights --shutdown` on the build host
+- [x] ~~Push granite and nemotron images to quay.io/danclark~~ **Obsolete 2026-10-04** — both ship
+      as Red Hat ModelCars, as does gpt-oss-120b. Mirror instead of building; see below.
 - [x] ~~Verify Containerfiles for gpt-oss and qwen use single-layer `COPY --chown --chmod`~~ **Verified 2026-10-04** — all three already correct
 - [x] ~~Remove route.yaml from gpt-oss and qwen `openshift/` dirs~~ **Done 2026-10-04**
 - [x] Update READMEs for granite and nemotron to reflect correct HuggingFace repo names (RedHatAI, not ibm-granite/nvidia)
