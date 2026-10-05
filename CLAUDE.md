@@ -55,6 +55,12 @@ Two traps this avoids, both of which produced badly wrong numbers before:
 The method is validated against a known-good figure: `granite-4.0-h-small-FP8-dynamic` measures
 32.7 GB across 7 shards, matching the independently-derived ~33 GB in the GPU sizing research doc.
 
+**`ols_candidate`** ranks the five OpenShift Lightspeed candidates 1–5; blank for everything else,
+so a non-empty value is the filter. The ranking balances tool-selection quality against GPU cost:
+1 gpt-oss-20b, 2 Qwen3-8B, 3 Ministral-3-14B, 4 Llama-3.1-8B, 5 granite-4.0-h-small. All five
+have a tool-call parser in RHOAI 3.5, a published ModelCar, and run on one GPU (24 GB except
+granite at 48 GB). See `ols/` for the matching OLSConfig stubs.
+
 **ModelCar columns.** `redhat_modelcar` is the full registry path to mirror (48 of 99 buildable
 models have one); `modelcar_gb` is the compressed image size summed from the registry manifest's
 layer sizes — the amd64 entry for multi-arch indexes; `modelcar_arch` lists the platforms the
@@ -167,6 +173,13 @@ which has dedicated chapters for Llama 3.1, Qwen 3, Ministral 3 and gpt-oss:
 | granite-4.0-h-* | `granite4` | — (Granite 3.x uses `granite`) |
 
 Gemma has no parser in 3.5 either — the Gemma builds still have no tool-calling path.
+
+**Decision (2026-10-04): the three Gemma directories are kept as chat/RAG-only builds.** They
+cannot do tool calling, so they are not candidates for OpenShift Lightspeed cluster interaction or
+any agentic workload. They also have no published ModelCar, so unlike the five OLS candidates they
+must be built from source. Before spending ~86 GB of bandwidth on them, run the architecture
+registration check below — it is still unverified that `Gemma3ForConditionalGeneration` and
+`Gemma4ForConditionalGeneration` are registered in the GA runtime.
 
 ### The `image` volume caveat for standalone
 
@@ -287,18 +300,24 @@ Build must happen on a machine with internet access — the weights are too larg
 
 - [ ] Build + push the 5 Enabled models (granite-guardian, qwen3-embedding, 3x gemma) and granite/nemotron — on a machine with bandwidth
 - [ ] Push granite and nemotron images to quay.io/danclark
-- [ ] Verify Containerfiles for gpt-oss and qwen use single-layer `COPY --chown --chmod` pattern (avoid doubled image size)
-- [ ] Remove route.yaml from gpt-oss and qwen `openshift/` dirs if still present (routes not needed)
+- [x] ~~Verify Containerfiles for gpt-oss and qwen use single-layer `COPY --chown --chmod`~~ **Verified 2026-10-04** — all three already correct
+- [x] ~~Remove route.yaml from gpt-oss and qwen `openshift/` dirs~~ **Done 2026-10-04**
 - [x] Update READMEs for granite and nemotron to reflect correct HuggingFace repo names (RedHatAI, not ibm-granite/nvidia)
 - [x] ~~Resolve the LLMInferenceService apiVersion conflict~~ **Closed 2026-10-04** — CRD serves both
       v1alpha1 and v1alpha2; the books document different versions, not conflicting advice. Repo
       targets v1alpha2 and the manifests match its verified schema.
 - [x] ~~Determine whether imagePullSecrets is needed for the ModelCar~~ **Closed 2026-10-04** —
       spec.storageInitializer has only `enabled`, no credentials. Cluster-wide pull secret covers it.
-- [ ] Verify Gemma 3/4 architecture registration in the GA image before downloading Gemma weights
+- [ ] Verify Gemma 3/4 architecture registration in the GA image before downloading ~86 GB of
+      Gemma weights (kept as chat/RAG-only builds; no tool calling, no published ModelCar)
 - [ ] Confirm `layer_types` in gemma-3-12b-it config once downloaded (sliding-window ratio assumed)
 - [ ] Test an `image` volume pod on the target OCP 4.21.z — the only remaining way to settle whether
       the built-in SCCs permit it (fixed in 4.20.15 and 4.22; 4.21 undocumented)
 - [ ] Open a support case for RHOAI on FIPS-enabled clusters — docs confirmed silent, twice
-- [ ] Confirm `modelcar-llama-3-1-8b-instruct-fp8-dynamic:1.5` is the same artifact as
-      `RedHatAI/Meta-Llama-3.1-8B-Instruct-FP8-dynamic` (currently a name-based inference)
+- [x] ~~Confirm `modelcar-llama-3-1-8b-instruct-fp8-dynamic:1.5` matches the HF repo~~
+      **Closed 2026-10-04** — compared ModelCar layer sizes against HF safetensors shard sizes
+      without pulling: both are exactly two weight layers at 4999.4 MB and 4084.6 MB. Same method
+      confirms the other four candidates. Note gpt-oss-20b's ModelCar carries an extra ~13.75 GB
+      layer with no counterpart in the HF shard set, which is where its 3x size comes from.
+- [ ] Test `oci://` end to end on RHOAI 3.5 — documented as a supported scheme in both books but
+      never demonstrated; every worked example uses `hf://`
