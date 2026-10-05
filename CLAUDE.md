@@ -61,8 +61,8 @@ so a non-empty value is the filter. The ranking balances tool-selection quality 
 have a tool-call parser in RHOAI 3.5, a published ModelCar, and run on one GPU (24 GB except
 granite at 48 GB). See `ols/` for the matching OLSConfig stubs.
 
-**ModelCar columns.** `redhat_modelcar` is the full registry path to mirror (48 of 99 buildable
-models have one); `modelcar_gb` is the compressed image size summed from the registry manifest's
+**ModelCar columns.** `redhat_modelcar` is the full registry path to mirror (68 of 99 buildable
+models have one; 95 of all 135); `modelcar_gb` is the compressed image size summed from the registry manifest's
 layer sizes — the amd64 entry for multi-arch indexes; `modelcar_arch` lists the platforms the
 image publishes. All were read from the registry manifest without pulling. Every ModelCar
 referenced here supports amd64.
@@ -96,7 +96,7 @@ Weights are baked into a vLLM runtime image. Self-contained, but the image must 
 whenever the base image gets a CVE fix, and you own the FIPS surface.
 
 **2. Red Hat ModelCar** (`<family>/<variant>/{standalone,rhoai}/`). Weights come from Red Hat's
-published ModelCar OCI image; the runtime is Red Hat's. No build step. 48 of the 99 buildable
+published ModelCar OCI image; the runtime is Red Hat's. No build step. 68 of the 99 buildable
 models already have one — see the `redhat_modelcar` column.
 
 Five models are set up the ModelCar way, chosen as OpenShift Lightspeed candidates:
@@ -176,9 +176,9 @@ Gemma has no parser in 3.5 either — the Gemma builds still have no tool-callin
 
 **Decision (2026-10-04): the three Gemma directories are kept as chat/RAG-only builds.** They
 cannot do tool calling, so they are not candidates for OpenShift Lightspeed cluster interaction or
-any agentic workload. They also have no published ModelCar, so unlike the five OLS candidates they
-must be built from source. Before spending ~86 GB of bandwidth on them, run the architecture
-registration check below — it is still unverified that `Gemma3ForConditionalGeneration` and
+any agentic workload. They were also believed to have no ModelCar, but a live registry probe on 2026-10-05 found all
+three — mirror rather than build. Before relying on them, run the architecture registration
+check below — it is still unverified that `Gemma3ForConditionalGeneration` and
 `Gemma4ForConditionalGeneration` are registered in the GA runtime.
 
 ### The `image` volume caveat for standalone
@@ -201,43 +201,54 @@ Still needs one `oc apply` on the target 4.21.z to settle.
 
 ## Mirror or build?
 
-Ten directories have a `build.sh`, but only five of them need to be built. The rest have a Red Hat
-ModelCar, which is cheaper to obtain, needs no rebuild when the base image gets a CVE fix, and
-moves the FIPS surface onto Red Hat's runtime.
+**Rebuilt from the live registry 2026-10-05.** Of the ten directories with a `build.sh`, only
+**two** still need building, and both are upstream `Qwen/` repos with no Red Hat support
+statement. Everything else ships as a ModelCar.
 
 | Build dir | ModelCar | Action |
 |---|---|---|
-| `gpt-oss/120B` | `rhelai1/modelcar-gpt-oss-120b:1.5` | **mirror** — build avoidable |
-| `granite/4.0-h-small-FP8` | `rhai/modelcar-granite-4-0-h-small-fp8-dynamic:3.0` | **mirror** — build avoidable |
-| `nemotron/70B-FP8` | `rhelai1/modelcar-llama-3-1-nemotron-70b-instruct-hf-fp8-dynamic:1.5` | **mirror** — build avoidable |
-| `granite-guardian/3.2-5B` | none | **build** |
-| `qwen3-embedding/8B` | none | **build** |
-| `gemma/3-12B-it` | none | **build** |
-| `gemma/4-26B-A4B-FP8` | none | **build** |
-| `gemma/4-31B-FP8` | none | **build** |
-| `qwen/32B`, `qwen/3.8B` | none | **build**, but these are upstream `Qwen/` repos with no Red Hat support statement |
+| `gpt-oss/120B` | `rhelai1/modelcar-gpt-oss-120b:1.5` | mirror |
+| `granite/4.0-h-small-FP8` | `rhai/modelcar-granite-4-0-h-small-fp8-dynamic:3.0` | mirror |
+| `nemotron/70B-FP8` | `rhelai1/modelcar-llama-3-1-nemotron-70b-instruct-hf-fp8-dynamic:1.5` | mirror |
+| `granite-guardian/3.2-5B` | `rhai/modelcar-granite-guardian-3-2-5b:3.0` | mirror |
+| `qwen3-embedding/8B` | `rhelai1/modelcar-qwen3-embedding-8b:1.5` | mirror |
+| `gemma/3-12B-it` | `rhai/modelcar-gemma-3-12b-it:3.0` | mirror |
+| `gemma/4-26B-A4B-FP8` | `rhai/modelcar-gemma-4-26b-a4b-it-fp8-dynamic:3.0` | mirror |
+| `gemma/4-31B-FP8` | `rhai/modelcar-gemma-4-31b-it-fp8-dynamic:3.0` | mirror |
+| `qwen/32B` | none | **build** — `Qwen/Qwen3-32B`, not a Red Hat artifact |
+| `qwen/3.8B` | none | **build** — `Qwen/Qwen3-4B`, not a Red Hat artifact |
 
-The build directories for the three mirrorable models are kept rather than deleted: building gives
-you an image in your own registry under your own tag, which some disconnected workflows want for
-provenance. Mirroring is the cheaper default.
+The build directories are kept rather than deleted: building gives you an image in your own
+registry under your own tag, which some disconnected workflows want for provenance. Mirroring is
+the cheaper default and is what the TODO assumes.
 
-Do not confuse the two groups of five. The **five OLS candidates** (`ols_candidate` 1–5) all ship
-as ModelCars and need **no build at all**. The **five unbuilt models** above are a different set.
+### ⚠️ Enumerate ModelCars from the registry, not the docs
+
+The `redhat_modelcar` column was first built from the *Validated models* documentation tables.
+**That undercounted by 34.** Probing `registry.redhat.io` directly found ModelCars for 95 of the
+135 candidates (68 of the 99 buildable), against 48 from the docs. Among the misses were every
+model in what had been a five-model overnight build queue — the entire job was unnecessary.
+Mixtral had also moved from `:1.4` to `:1.5` without the table saying so.
+
+Re-probe rather than trusting the table. Naming is mechanical: lowercase the HF repo basename,
+replace `.` and `_` with `-`, prefix `modelcar-`, and try both `rhai/…:3.0` and `rhelai1/…:1.5`
+(a few older ones are `:1.4`). `Meta-Llama-*` drops the `Meta-` prefix.
+
+```bash
+skopeo inspect --raw docker://registry.redhat.io/rhai/modelcar-<name>:3.0 >/dev/null 2>&1 && echo exists
+```
 
 ### Overnight batch build
 
-`hack/batch-build.sh` builds and pushes exactly the five that have no ModelCar:
+`hack/batch-build.sh` now targets only the two models with no ModelCar:
 
 ```bash
 ./hack/batch-build.sh --authfile ~/quay-pull-secret.json --clean-weights --shutdown
 ```
 
-Every preflight check — credentials, `HF_TOKEN`, base-image reachability, each `build.sh`, disk
-headroom, and passwordless sudo if `--shutdown` was passed — runs **before** the first download, so
-a bad flag fails in seconds rather than eight hours in. Models build smallest-first; a failure in
-one does not abandon the rest. After each successful push the local image is removed, and with
-`--clean-weights` the downloaded weights are too — without that flag the run needs roughly twice
-the disk. Logs go to `logs/` (gitignored).
+Consider whether you want it at all — both models are outside Red Hat's support statement. Every
+preflight check runs before the first download, models build smallest-first, one failure does not
+abandon the rest, and successful pushes clean up after themselves. Logs go to `logs/` (gitignored).
 
 ## Build & Push
 
@@ -338,8 +349,11 @@ Build must happen on a machine with internet access — the weights are too larg
 
 ## TODO
 
-- [ ] Build + push the 5 models that have **no ModelCar alternative** — run
-      `./hack/batch-build.sh --authfile <path> --clean-weights --shutdown` on the build host
+- [ ] Decide whether the two non-Red Hat Qwen models are wanted at all. If yes,
+      `./hack/batch-build.sh --authfile <path> --clean-weights --shutdown`. Everything else in
+      the repo is mirrorable — the previous five-model build queue was unnecessary.
+- [ ] Mirror the needed ModelCars into the disconnected registry (68 of 99 buildable models
+      have one; see `redhat_modelcar` / `modelcar_gb`)
 - [x] ~~Push granite and nemotron images to quay.io/danclark~~ **Obsolete 2026-10-04** — both ship
       as Red Hat ModelCars, as does gpt-oss-120b. Mirror instead of building; see below.
 - [x] ~~Verify Containerfiles for gpt-oss and qwen use single-layer `COPY --chown --chmod`~~ **Verified 2026-10-04** — all three already correct
@@ -350,8 +364,8 @@ Build must happen on a machine with internet access — the weights are too larg
       targets v1alpha2 and the manifests match its verified schema.
 - [x] ~~Determine whether imagePullSecrets is needed for the ModelCar~~ **Closed 2026-10-04** —
       spec.storageInitializer has only `enabled`, no credentials. Cluster-wide pull secret covers it.
-- [ ] Verify Gemma 3/4 architecture registration in the GA image before downloading ~86 GB of
-      Gemma weights (kept as chat/RAG-only builds; no tool calling, no published ModelCar)
+- [ ] Verify Gemma 3/4 architecture registration in the GA image before relying on the Gemma
+      ModelCars (kept as chat/RAG-only; no tool calling, but ModelCars do exist — mirror them)
 - [ ] Confirm `layer_types` in gemma-3-12b-it config once downloaded (sliding-window ratio assumed)
 - [ ] Test an `image` volume pod on the target OCP 4.21.z — the only remaining way to settle whether
       the built-in SCCs permit it (fixed in 4.20.15 and 4.22; 4.21 undocumented)

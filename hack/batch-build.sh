@@ -1,9 +1,15 @@
 #!/bin/bash
 # Build and push the model images that have no Red Hat ModelCar alternative.
 #
-# These five are the only ones that genuinely require building. Every other
-# model in this repo either ships as a Red Hat ModelCar (mirror it instead -
-# see the redhat_modelcar column in model-list.csv) or is not wanted.
+# As of 2026-10-05 that is exactly TWO, and both are upstream Qwen repos that
+# carry no Red Hat support statement. Everything else in this repo ships as a
+# Red Hat ModelCar - mirror those instead, see the redhat_modelcar column in
+# model-list.csv.
+#
+# Read this before running: you may not want to run it at all. These two models
+# are not Red Hat artifacts, are absent from the candidate list, and have no
+# support coverage. If you only need supported models, skip this entirely and
+# mirror ModelCars.
 #
 # Intended for an unattended overnight run on a build host with bandwidth.
 # All preflight checks run BEFORE the first download, so a bad flag or a
@@ -21,11 +27,8 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # dir:approx weight download GB (for the disk preflight)
 MODELS=(
-  "granite-guardian/3.2-5B:12"
-  "qwen3-embedding/8B:16"
-  "gemma/3-12B-it:25"
-  "gemma/4-26B-A4B-FP8:29"
-  "gemma/4-31B-FP8:34"
+  "qwen/3.8B:8"
+  "qwen/32B:66"
 )
 
 AUTHFILE=""
