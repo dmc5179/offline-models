@@ -1,0 +1,73 @@
+# Probe: does this cluster permit Kubernetes `image` volumes under the
+# default restricted-v2 SCC and the restricted PodSecurity profile?
+#
+# This is the one open question the docs cannot answer for OCP 4.21. The SCC
+# fix landed in 4.20.15 (RHBA-2026:2987) and 4.22 (OCPBUGS-65807); 4.21 has no
+# statement either way. All five <model>/standalone/ overlays depend on this.
+#
+#   oc new-project image-volume-test
+#   oc apply -f hack/image-volume-probe.yaml
+#   oc wait --for=condition=Ready pod/image-volume-probe --timeout=180s
+#   oc logs image-volume-probe
+#
+# Deliberately mirrors the real deployments:
+#   - runtime image differs from the mounted image, as vLLM differs from the ModelCar
+#   - carries the exact securityContext the standalone deployments use, so a
+#     PodSecurity failure here would mean that block is wrong
+#   - exercises subPath, which the standalone overlays rely on to map the
+#     ModelCar's /models into /mnt/models
+#
+# Uses ubi-micro as the mounted image because it is ~10 MB and is the same base
+# Red Hat's ModelCars are built on. No GPU, no large pull.
+#
+# Clean up:  oc delete -f hack/image-volume-probe.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: image-volume-probe
+  labels:
+    app: image-volume-probe
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  containers:
+    - name: probe
+      # Needs a shell, so ubi-minimal rather than ubi-micro.
+      image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+      command:
+        - /bin/sh
+        - -c
+        - |
+          echo "=== whole image mounted at /mnt/whole ==="
+          ls /mnt/whole 2>&1 | head -15
+          echo
+          echo "=== subPath=usr mounted at /mnt/sub ==="
+          ls /mnt/sub 2>&1 | head -15
+          echo
+          echo "=== is the mount read-only? (a write should fail) ==="
+          touch /mnt/whole/should-fail 2>&1 && echo "WRITABLE (unexpected)" || echo "read-only, as expected"
+          echo
+          echo "running as uid=$(id -u)"
+          echo PROBE_OK
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop:
+            - ALL
+        runAsNonRoot: true
+      volumeMounts:
+        - name: img
+          mountPath: /mnt/whole
+          readOnly: true
+        - name: img
+          mountPath: /mnt/sub
+          subPath: usr
+          readOnly: true
+  volumes:
+    - name: img
+      image:
+        reference: registry.access.redhat.com/ubi9/ubi-micro:latest
+        pullPolicy: IfNotPresent
