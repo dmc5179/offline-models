@@ -31,9 +31,17 @@ Each sequence needs **1.2 GB** of KV plus state to hold a full context window.
   92.0 GB  required, before activation overhead
 ```
 
-### → `p4de.24xlarge` (8x A100-80) — **$29,908/month** ($40.97/hr)
+### → EC2 instance `p4de.24xlarge`
 
-$2,991 per user per month at 10 users.
+| | |
+|---|---|
+| **EC2 instance type** | **`p4de.24xlarge`** |
+| GPUs | 8x A100-80, 640 GB total VRAM |
+| Host | 96 vCPU, 1,152 GiB RAM, 8x1000 GB NVMe |
+| On-demand | $40.97/hr — **$29,908/month** |
+| Per user | $2,991/month at 10 users |
+
+Tensor parallelism: `--tensor-parallel-size 8`.
 
 ## Context length is the dominant cost lever
 

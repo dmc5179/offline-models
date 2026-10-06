@@ -28,9 +28,17 @@ Each sequence needs **4.8 GB** of KV to hold a full context window.
  113.6 GB  required, before activation overhead
 ```
 
-### → `g6e.12xlarge` (4x L40S) — **$7,658/month** ($10.49/hr)
+### → EC2 instance `g6e.12xlarge`
 
-$766 per user per month at 10 users.
+| | |
+|---|---|
+| **EC2 instance type** | **`g6e.12xlarge`** |
+| GPUs | 4x L40S, 192 GB total VRAM |
+| Host | 48 vCPU, 384 GiB RAM, 2x1900 GB NVMe |
+| On-demand | $10.49/hr — **$7,658/month** |
+| Per user | $766/month at 10 users |
+
+Tensor parallelism: `--tensor-parallel-size 4`.
 
 ## Context length is the dominant cost lever
 

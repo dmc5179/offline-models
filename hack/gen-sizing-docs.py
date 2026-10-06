@@ -26,6 +26,24 @@ INSTANCES = [
     ("p6-b200.48xlarge", "B200",    8, 180, 8.000, 92.00, True),
 ]
 
+# Host specs, for sizing the MachineSet / node pool rather than the GPU itself.
+# instance -> (vCPU, host RAM GiB, EBS-only or local NVMe)
+HOST = {
+    "g6.xlarge":        (  4,   16, "250 GB NVMe"),
+    "g5.xlarge":        (  4,   16, "250 GB NVMe"),
+    "g6e.xlarge":       (  4,   32, "250 GB NVMe"),
+    "g6e.2xlarge":      (  8,   64, "450 GB NVMe"),
+    "g6.12xlarge":      ( 48,  192, "2x940 GB NVMe"),
+    "g5.12xlarge":      ( 48,  192, "3800 GB NVMe"),
+    "g6e.12xlarge":     ( 48,  384, "2x1900 GB NVMe"),
+    "g6e.48xlarge":     (192, 1536, "4x1900 GB NVMe"),
+    "p4d.24xlarge":     ( 96, 1152, "8x1000 GB NVMe"),
+    "p4de.24xlarge":    ( 96, 1152, "8x1000 GB NVMe"),
+    "p5.48xlarge":      (192, 2048, "8x3840 GB NVMe"),
+    "p5e.48xlarge":     (192, 2048, "8x3840 GB NVMe"),
+    "p6-b200.48xlarge": (192, 2048, "8x3840 GB NVMe"),
+}
+
 M = [
  dict(slug='nemotron-3-super-120b', title='Nemotron 3 Super 120B-A12B (NVFP4)',
       car='registry.redhat.io/rhai/modelcar-nvidia-nemotron-3-super-120b-a12b-nvfp4:3.0',
@@ -130,6 +148,7 @@ def fits(m, inst, ctx):
 
 
 TARGET_USERS = 10
+VRAM = {i[0]: i[3] for i in INSTANCES}
 
 
 def kv_bytes(m, ctx, kvb=None):
@@ -194,9 +213,19 @@ def doc(m):
     if pick:
         name, gpu, n, price, need = pick
         mo = price * 730
-        a(f"### → `{name}` ({n}x {gpu}) — **${mo:,.0f}/month** (${price:.2f}/hr)")
+        a(f"### → EC2 instance `{name}`")
         a("")
-        a(f"${mo/TARGET_USERS:,.0f} per user per month at {TARGET_USERS} users.")
+        vcpu, ram, disk = HOST[name]
+        a("| | |")
+        a("|---|---|")
+        a(f"| **EC2 instance type** | **`{name}`** |")
+        a(f"| GPUs | {n}x {gpu}, {n*VRAM[name]} GB total VRAM |")
+        a(f"| Host | {vcpu} vCPU, {ram:,} GiB RAM, {disk} |")
+        a(f"| On-demand | ${price:.2f}/hr — **${mo:,.0f}/month** |")
+        a(f"| Per user | ${mo/TARGET_USERS:,.0f}/month at {TARGET_USERS} users |")
+        a("")
+        a(f"Tensor parallelism: `--tensor-parallel-size {n}`."
+          if n > 1 else "Single GPU — no `--tensor-parallel-size` needed.")
     else:
         a(f"### → Exceeds every instance listed. {m['weights_gb'] + per*TARGET_USERS/1e9:,.0f} GB "
           f"needed; the largest single node here is 8x B200 at 1,440 GB.")
@@ -300,8 +329,140 @@ def doc(m):
     return '\n'.join(L)
 
 
+def readme():
+    """Index page. Built from the same data as the per-model docs, so the
+    summary table cannot drift from the docs it summarises."""
+    rows = []
+    for m in sorted(M, key=lambda x: x['weights_gb']):
+        pk = cheapest_for(m, TARGET_USERS, m['native'])
+        per = kv_bytes(m, m['native'])
+        rows.append((m, pk, per))
+
+    L = []; a = L.append
+    a("# GPU sizing and cost")
+    a("")
+    a("One doc per self-hosted model from `../generative-ai-models.md` that has a published Red Hat")
+    a(f"ModelCar. Each is sized to run **{TARGET_USERS} concurrent users at the model's default "
+      "context window** —")
+    a("not merely to load the weights.")
+    a("")
+    a("| Model | Weights | Default context | KV/user | **EC2 instance** | GPUs | $/month |")
+    a("|---|---|---|---|---|---|---|")
+    for m, pk, per in rows:
+        link = f"[{m['title'].split(' (')[0]}](sizing-{m['slug']}.md)"
+        if pk:
+            nm, g, n, p, need = pk
+            a(f"| {link} | {m['weights_gb']} GB | {m['native']:,} | {per/1e9:.1f} GB "
+              f"| **`{nm}`** | {n}x {g} | **${p*730:,.0f}** |")
+        else:
+            a(f"| {link} | {m['weights_gb']} GB | {m['native']:,} | {per/1e9:.1f} GB "
+              f"| — | — | exceeds all |")
+    a("")
+    a("Approximate us-east-1 on-demand. Each doc breaks the same model down by context length and")
+    a("user count.")
+    a("")
+
+    a("## Instance reference")
+    a("")
+    a("The instance types above, with the host specs you need to define the MachineSet or node pool:")
+    a("")
+    a("| EC2 instance | GPUs | VRAM | vCPU | Host RAM | Local disk | $/hr | $/month |")
+    a("|---|---|---|---|---|---|---|---|")
+    used = []
+    for m, pk, per in rows:
+        if pk and pk[0] not in used:
+            used.append(pk[0])
+    for name, gpu, n, gb, bw, price, bb in INSTANCES:
+        if name not in used: continue
+        vcpu, ram, disk = HOST[name]
+        a(f"| `{name}` | {n}x {gpu} | {n*gb} GB | {vcpu} | {ram:,} GiB | {disk} "
+          f"| ${price:.2f} | ${price*730:,.0f} |")
+    a("")
+    a("The p-family has no single-GPU or dual-GPU form — it starts at 8 GPUs. That is why the three")
+    a("models needing A100-class memory all land on the same `p4de.24xlarge` bill regardless of how")
+    a("differently they use it.")
+    a("")
+
+    a("## Why these are bigger than \"minimum to run\"")
+    a("")
+    small = min(rows, key=lambda r: r[0]['weights_gb'])
+    m, pk, per = small
+    one = cheapest_for(m, 1, 8192)
+    a("Loading the weights is the easy part. Serving "
+      f"{TARGET_USERS} users who can each fill the full context")
+    a(f"window is what sets the instance. {m['title']} loads on a single "
+      f"${one[3]*730:,.0f}/month `{one[0]}` — but {TARGET_USERS} users")
+    a(f"at its native {m['native']:,}-token context need {per*TARGET_USERS/1e9:.0f} GB of KV on top "
+      f"of {m['weights_gb']} GB of weights, so the")
+    a(f"real answer is `{pk[0]}` ({pk[2]}x {pk[1]}) at ${pk[3]*730:,.0f}/month. That gap is the "
+      "point of these docs.")
+    a("")
+
+    a("## The three levers, in order of impact")
+    a("")
+    c8 = cheapest_for(m, TARGET_USERS, 8192)
+    a("**1. Context length.** KV scales linearly with `--max-model-len` and dominates everything else")
+    a(f"at default settings. {m['title']} for {TARGET_USERS} users costs ${c8[3]*730:,.0f}/month on "
+      f"`{c8[0]}` at 8k context")
+    a(f"and ${pk[3]*730:,.0f}/month on `{pk[0]}` at its {m['native']//1024}k default — a "
+      f"{pk[3]/c8[3]:.1f}x swing from one flag.")
+    a("Most agentic traffic never fills the window. Cap it at what you actually use.")
+    a("")
+    a("**2. KV cache dtype.** Only Nemotron 3 Super declares an FP8 KV cache in its checkpoint. Every")
+    a("other model here keeps KV in FP16 by default, so `--kv-cache-dtype fp8` halves per-sequence KV")
+    a("and frequently drops you a whole instance class. Validate accuracy against your own evals first.")
+    a("")
+    a("**3. Attention architecture, which you cannot change but should understand.** Llama 3.3 70B is")
+    a("the smallest of the large models at 39.6 GB of weights, yet the most expensive to scale: all 80")
+    a("layers do full attention, so each user costs 42.9 GB of KV at 128k. Nemotron 3 Super is twice")
+    a("the weights but has only 8 attention layers of 88 and an FP8 KV cache — 1.2 GB per user at")
+    a("*twice* the context. Sliding-window attention in the Gemma and GPT-OSS families has the same")
+    a("dampening effect. Parameter count is a poor predictor of serving cost.")
+    a("")
+
+    a("## What these numbers are and are not")
+    a("")
+    a("The memory arithmetic is exact, derived from each model's `config.json`, and it is deliberately")
+    a(f"conservative: it guarantees all {TARGET_USERS} users can hold a full window simultaneously. "
+      "vLLM allocates")
+    a("KV blocks on demand, so steady-state usage is lower — but this is the figure that cannot")
+    a("over-commit.")
+    a("")
+    a("**Throughput is not modelled.** Red Hat publishes accuracy benchmarks for its validated models")
+    a("and no throughput, latency or concurrency figures anywhere, so there is nothing authoritative to")
+    a("cite. Latency will bind before memory does. Measure on the candidate instance:")
+    a("")
+    a("```bash")
+    a("vllm bench serve --model <name> --host localhost --port 8000 \\")
+    a("  --dataset-name random --random-input-len 4000 --random-output-len 500 \\")
+    a(f"  --max-concurrency {TARGET_USERS} --num-prompts 100")
+    a("```")
+    a("")
+    a("vCPU, RAM and disk figures are AWS published specs; prices are approximate us-east-1 on-demand")
+    a("and drift. Verify both before quoting.")
+    a("")
+
+    a("## Not covered")
+    a("")
+    a("- **Laya 0.3** — vLLM cannot serve it; `config.json` declares `LayaTypedDecisions` and the card")
+    a("  states it *\"never generates text\"*. See note B in `../generative-ai-models.md`.")
+    a("- **Llama 3.2 11B Vision Instruct** — Red Hat publishes no build, so there is no ModelCar to")
+    a("  size. See note C.")
+    a("- Cloud-hosted entries (Bedrock, Google Cloud) — GPU sizing does not apply.")
+    a("")
+    a(f"Regenerate all {len(M)} docs and this index with `../hack/gen-sizing-docs.py`. "
+      "`../hack/size-nemotron-super.py`")
+    a("does interactive what-if on Nemotron specifically, including throughput estimation.")
+    a("")
+    return '\n'.join(L)
+
+
 for m in M:
     p = os.path.join(OUT, f"sizing-{m['slug']}.md")
     txt = doc(m)
     open(p, 'w').write(txt)
     print(f"{len(txt.splitlines()):>4} lines  docs/sizing-{m['slug']}.md")
+
+txt = readme()
+open(os.path.join(OUT, 'README.md'), 'w').write(txt)
+print(f"{len(txt.splitlines()):>4} lines  docs/README.md")
