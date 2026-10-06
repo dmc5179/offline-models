@@ -61,8 +61,8 @@ so a non-empty value is the filter. The ranking balances tool-selection quality 
 have a tool-call parser in RHOAI 3.5, a published ModelCar, and run on one GPU (24 GB except
 granite at 48 GB). See `ols/` for the matching OLSConfig stubs.
 
-**ModelCar columns.** `redhat_modelcar` is the full registry path to mirror (68 of 99 buildable
-models have one; 95 of all 135); `modelcar_gb` is the compressed image size summed from the registry manifest's
+**ModelCar columns.** `redhat_modelcar` is the full registry path to mirror (**99 of 99** buildable
+models have one; 127 of all 135); `modelcar_gb` is the compressed image size summed from the registry manifest's
 layer sizes — the amd64 entry for multi-arch indexes; `modelcar_arch` lists the platforms the
 image publishes. All were read from the registry manifest without pulling. Every ModelCar
 referenced here supports amd64.
@@ -96,8 +96,8 @@ Weights are baked into a vLLM runtime image. Self-contained, but the image must 
 whenever the base image gets a CVE fix, and you own the FIPS surface.
 
 **2. Red Hat ModelCar** (`<family>/<variant>/{standalone,rhoai}/`). Weights come from Red Hat's
-published ModelCar OCI image; the runtime is Red Hat's. No build step. 68 of the 99 buildable
-models already have one — see the `redhat_modelcar` column.
+published ModelCar OCI image; the runtime is Red Hat's. No build step. **All 99** buildable
+models have one — see the `redhat_modelcar` column.
 
 Five models are set up the ModelCar way, chosen as OpenShift Lightspeed candidates:
 `gpt-oss/20B`, `qwen/8B-FP8`, `ministral/3-14B`, `llama/3.1-8B-FP8`, `granite/4.0-h-small-FP8`.
@@ -222,25 +222,52 @@ The build directories are kept rather than deleted: building gives you an image 
 registry under your own tag, which some disconnected workflows want for provenance. Mirroring is
 the cheaper default and is what the TODO assumes.
 
-### ⚠️ Enumerate ModelCars from the registry, not the docs
+### ⚠️ Enumerate ModelCars from the registry, and probe all THREE naming conventions
 
 The `redhat_modelcar` column was first built from the *Validated models* documentation tables.
-**That undercounted by 34.** Probing `registry.redhat.io` directly found ModelCars for 95 of the
-135 candidates (68 of the 99 buildable), against 48 from the docs. Among the misses were every
-model in what had been a five-model overnight build queue — the entire job was unnecessary.
-Mixtral had also moved from `:1.4` to `:1.5` without the table saying so.
+That undercounted badly, and two successive registry probes each found more:
 
-Re-probe rather than trusting the table. Naming is mechanical: lowercase the HF repo basename,
-replace `.` and `_` with `-`, prefix `modelcar-`, and try both `rhai/…:3.0` and `rhelai1/…:1.5`
-(a few older ones are `:1.4`). `Meta-Llama-*` drops the `Meta-` prefix.
+| Pass | Method | Coverage (all 135) |
+|---|---|---|
+| 1 | docs tables | 48 |
+| 2 | registry, `modelcar-<model>` + bare `<model>` | 95 |
+| 3 | registry, all three conventions | **127** |
+
+**As of pass 3, every one of the 99 buildable models has a ModelCar.** Nothing in the supported set
+needs building. Only 8 rows lack one, and all are outside Red Hat's support matrix: two
+`Nemotron-3-Ultra` variants that are HF-collection-only, and six `Not listed` models.
+
+The three conventions are not interchangeable — a path that looks obviously right can 404 while the
+same model exists under another form:
+
+| Pattern | Example |
+|---|---|
+| `rhelai1/modelcar-<model>:1.5` (also `:1.4`) | `rhelai1/modelcar-llama-3-3-70b-instruct:1.5` |
+| `rhai/modelcar-<model>:3.0` | `rhai/modelcar-gemma-3-12b-it:3.0` |
+| `rhai/modelcar-<org>-<model>:3.0` | `rhai/modelcar-redhatai-gemma-4-31b-it-nvfp4:3.0` |
+
+The `rhai` namespace additionally serves every repo *without* the `modelcar-` prefix
+(`rhai/openai-gpt-oss-safeguard-120b:3.0`), under both `:1.5` and `:3.0`, plus build-stamped tags
+like `:3.0-1782241594` and a floating `:latest`. Prefer `modelcar-` + `:3.0` + `rhai`; the build
+stamp pins an exact build when reproducibility matters.
+
+Normalisation: lowercase the HF basename, `.` and `_` to `-`. `Meta-Llama-*` drops `Meta-`.
+
+**Absence of a path is not evidence of absence until all three have been tried.** Pass 2 wrongly
+reported nine Gemma 4 variants and the whole five-model build queue as needing builds.
+
+Re-run it rather than hand-checking — Red Hat adds ModelCars continuously:
 
 ```bash
-skopeo inspect --raw docker://registry.redhat.io/rhai/modelcar-<name>:3.0 >/dev/null 2>&1 && echo exists
+./hack/probe-modelcars.sh          # probe and report, no writes
+./hack/probe-modelcars.sh --write  # also update both CSVs
 ```
 
 ### Overnight batch build
 
-`hack/batch-build.sh` now targets only the two models with no ModelCar:
+`hack/batch-build.sh` targets the only two directories with no ModelCar — `Qwen/Qwen3-32B` and
+`Qwen/Qwen3-4B`, re-confirmed absent across 48 candidate paths on 2026-10-06. Every other model in
+the repo, supported or not, can be mirrored:
 
 ```bash
 ./hack/batch-build.sh --authfile ~/quay-pull-secret.json --clean-weights --shutdown
@@ -352,8 +379,8 @@ Build must happen on a machine with internet access — the weights are too larg
 - [ ] Decide whether the two non-Red Hat Qwen models are wanted at all. If yes,
       `./hack/batch-build.sh --authfile <path> --clean-weights --shutdown`. Everything else in
       the repo is mirrorable — the previous five-model build queue was unnecessary.
-- [ ] Mirror the needed ModelCars into the disconnected registry (68 of 99 buildable models
-      have one; see `redhat_modelcar` / `modelcar_gb`)
+- [ ] Mirror the needed ModelCars into the disconnected registry — **all 99 buildable models have
+      one**; see `redhat_modelcar` / `modelcar_gb`. No supported model requires building.
 - [x] ~~Push granite and nemotron images to quay.io/danclark~~ **Obsolete 2026-10-04** — both ship
       as Red Hat ModelCars, as does gpt-oss-120b. Mirror instead of building; see below.
 - [x] ~~Verify Containerfiles for gpt-oss and qwen use single-layer `COPY --chown --chmod`~~ **Verified 2026-10-04** — all three already correct
