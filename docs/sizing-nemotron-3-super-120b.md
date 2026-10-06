@@ -14,75 +14,60 @@ Only 8 of 88 layers are attention, so KV is 4 KiB/token — about 80x cheaper th
 | Image to mirror | 80.4 GB |
 | Architecture | LatentMoE — Mamba-2 + MoE + attention hybrid, with MTP |
 | Attention layers | 8 full, of 88 total |
-| Max context | 262,144 |
+| **Default context** | **262,144** (vLLM derives `--max-model-len` from this) |
+| KV cache dtype | FP8 (declared in checkpoint) |
 | Minimum GPU (model card) | 1x B200 or 1x DGX Spark |
 | Supported microarch | A100, H100-80GB, Blackwell |
 | Validated on | vLLM 0.18.0 / RHAIIS 3.4 / RHOAI 3.4 |
 
-## Memory per concurrent sequence
+## Recommended: 10 concurrent users at the default 262,144 context
 
-Plus 87 MB Mamba2 state per sequence (constant, `--mamba-ssm-cache-dtype float16`).
+Each sequence needs **1.2 GB** of KV plus state to hold a full context window.
 
-| Context | KV + state per sequence |
-|---|---|
-| 8,192 | 121 MB |
-| 32,768 | 221 MB |
-| 131,072 | 624 MB |
+```
+  80.4 GB  weights
+  11.6 GB  KV for 10 users x 262,144 tokens
+──────
+  92.0 GB  required, before activation overhead
+```
 
-## What fits, at 32,768 context
+### → `p4de.24xlarge` (8x A100-80) — **$29,908/month** ($40.97/hr)
 
-Restricted to the microarchitectures the model card supports (A100, H100-80GB, Blackwell). Other GPU families are excluded even where the weights would arithmetically fit.
+$2,991 per user per month at 10 users.
 
-| Instance | GPUs | $/hr | Concurrent sequences that fit |
-|---|---|---|---|
-| `p4de.24xlarge` | 8x A100-80 | $40.97 | 2,225 |
-| `p5.48xlarge` | 8x H100 | $55.04 | 2,225 |
-| `p5e.48xlarge` | 8x H200 | $61.78 | 4,255 |
-| `p6-b200.48xlarge` | 8x B200 | $92.00 | 5,552 |
+## Context length is the dominant cost lever
 
-## How many users needs how big a GPU
+Same 10 users, different `--max-model-len`:
 
-Cheapest instance that fits each user count, at 32,768 context:
-
-| Concurrent users | Instance | GPUs | $/month | $/user/month |
+| --max-model-len | KV per user | Total needed | Instance | $/month |
 |---|---|---|---|---|
-| 1 | `p4de.24xlarge` | 8x A100-80 | $29,908 | $29,908 |
-| 5 | `p4de.24xlarge` | 8x A100-80 | $29,908 | $5,982 |
-| 10 | `p4de.24xlarge` | 8x A100-80 | $29,908 | $2,991 |
-| 25 | `p4de.24xlarge` | 8x A100-80 | $29,908 | $1,196 |
-| 50 | `p4de.24xlarge` | 8x A100-80 | $29,908 | $598 |
-| 100 | `p4de.24xlarge` | 8x A100-80 | $29,908 | $299 |
-| 250 | `p4de.24xlarge` | 8x A100-80 | $29,908 | $120 |
+| 8,192 | 0.1 GB | 82 GB | `p4de.24xlarge` (8x A100-80) | $29,908 |
+| 32,768 | 0.2 GB | 83 GB | `p4de.24xlarge` (8x A100-80) | $29,908 |
+| 131,072 | 0.6 GB | 87 GB | `p4de.24xlarge` (8x A100-80) | $29,908 |
+| 262,144 (default) | 1.2 GB | 92 GB | `p4de.24xlarge` (8x A100-80) | $29,908 |
 
-## The price floor
+Most agentic traffic never fills the window. Capping `--max-model-len` at what you actually use is the single biggest saving available.
 
-**$29,908/month** — `p4de.24xlarge` (8x A100-80) at $40.97/hr.
+## Scaling past 10 users, at default context
 
-That is a floor, not a starting point. It does not fall with fewer users: you rent the whole instance whether one person uses it or 100 do. Unit cost is purely a utilisation question.
-
-> **AWS sells no single-GPU A100-80 instance** — the p-family starts at 8. $29,908/month is unavoidable even for a single user, so this model only makes economic sense at scale.
-
-Rough output-token cost at the floor instance, assuming 20 tok/s per active user sustained:
-
-| Users | $/1M output tokens |
-|---|---|
-| 1 | $569.03 |
-| 5 | $113.81 |
-| 10 | $56.90 |
-| 25 | $22.76 |
-| 50 | $11.38 |
-
-Agentic traffic is bursty, so divide by your duty cycle — users idle 80% of the time cost roughly a fifth of this.
+| Users | Instance | $/month | $/user/month |
+|---|---|---|---|
+| 1 | `p4de.24xlarge` (8x A100-80) | $29,908 | $29,908 |
+| 5 | `p4de.24xlarge` (8x A100-80) | $29,908 | $5,982 |
+| 10 | `p4de.24xlarge` (8x A100-80) | $29,908 | $2,991 |
+| 25 | `p4de.24xlarge` (8x A100-80) | $29,908 | $1,196 |
+| 50 | `p4de.24xlarge` (8x A100-80) | $29,908 | $598 |
+| 100 | `p4de.24xlarge` (8x A100-80) | $29,908 | $299 |
 
 ## Before you quote this
 
-- **Memory numbers above are exact**, derived from the model's `config.json`. Throughput is not modelled here — Red Hat publishes accuracy benchmarks for its validated models but no throughput, latency or concurrency figures.
-- **The sequence counts are a memory ceiling, not a capacity promise.** Latency binds long before memory does. Measure before committing:
+- Sizing above **guarantees** every one of the 10 users can fill the full 262,144-token window at once. vLLM allocates KV blocks on demand, so real usage is lower — but this is the figure that cannot over-commit.
+- **Memory is exact; throughput is not modelled.** Red Hat publishes accuracy benchmarks for its validated models and no throughput, latency or concurrency figures. Latency will bind before memory does. Measure:
 
   ```bash
   vllm bench serve --model <name> --host localhost --port 8000 \
     --dataset-name random --random-input-len 4000 --random-output-len 500 \
-    --max-concurrency 32 --num-prompts 200
+    --max-concurrency 10 --num-prompts 100
   ```
 
 - Prices are approximate us-east-1 on-demand and drift. Verify before quoting.

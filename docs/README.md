@@ -1,55 +1,71 @@
 # GPU sizing and cost
 
 One doc per self-hosted model from `../generative-ai-models.md` that has a published Red Hat
-ModelCar. Each answers the same two questions: **how big a GPU for N users**, and **what is the
-price floor** below which cost does not fall.
+ModelCar. Each is sized to run **10 concurrent users at the model's default context window** —
+not merely to load the weights.
 
-| Model | Weights | Price floor | Floor instance | Doc |
-|---|---|---|---|---|
-| GPT-OSS 20B | 13.8 GB | **$584/mo** | 1x L4 | [sizing-gpt-oss-20b.md](sizing-gpt-oss-20b.md) |
-| Gemma 3 12B | 24.4 GB | **$1,358/mo** | 1x L40S | [sizing-gemma-3-12b.md](sizing-gemma-3-12b.md) |
-| Gemma 4 26B-A4B FP8 | 28.6 GB | **$1,358/mo** | 1x L40S | [sizing-gemma-4-26b-a4b.md](sizing-gemma-4-26b-a4b.md) |
-| Gemma 4 31B FP8 | 33.3 GB | **$1,358/mo** | 1x L40S | [sizing-gemma-4-31b.md](sizing-gemma-4-31b.md) |
-| Llama 3.3 70B INT4 | 39.6 GB | **$3,358/mo** | 4x L4 | [sizing-llama-3.3-70b.md](sizing-llama-3.3-70b.md) |
-| GPT-OSS 120B | 65.2 GB | **$3,358/mo** | 4x L4 | [sizing-gpt-oss-120b.md](sizing-gpt-oss-120b.md) |
-| Nemotron 3 Super 120B | 80.4 GB | **$29,908/mo** | 8x A100-80 | [sizing-nemotron-3-super-120b.md](sizing-nemotron-3-super-120b.md) |
+| Model | Weights | Default context | KV/user | Instance for 10 users | $/month |
+|---|---|---|---|---|---|
+| [GPT-OSS 20B](sizing-gpt-oss-20b.md) | 13.8 GB | 131,072 | 3.2 GB | `g6.12xlarge` (4x L4) | **$3,358** |
+| [Gemma 3 12B](sizing-gemma-3-12b.md) | 24.4 GB | 131,072 | 8.9 GB | `g6e.12xlarge` (4x L40S) | **$7,658** |
+| [Gemma 4 26B-A4B FP8](sizing-gemma-4-26b-a4b.md) | 28.6 GB | 262,144 | 10.9 GB | `g6e.12xlarge` (4x L40S) | **$7,658** |
+| [Gemma 4 31B FP8](sizing-gemma-4-31b.md) | 33.3 GB | 262,144 | 43.8 GB | `p4de.24xlarge` (8x A100-80) | **$29,908** |
+| [Llama 3.3 70B INT4](sizing-llama-3.3-70b.md) | 39.6 GB | 131,072 | 42.9 GB | `p4de.24xlarge` (8x A100-80) | **$29,908** |
+| [GPT-OSS 120B](sizing-gpt-oss-120b.md) | 65.2 GB | 131,072 | 4.8 GB | `g6e.12xlarge` (4x L40S) | **$7,658** |
+| [Nemotron 3 Super 120B](sizing-nemotron-3-super-120b.md) | 80.4 GB | 262,144 | 1.2 GB | `p4de.24xlarge` (8x A100-80) | **$29,908** |
 
-Floors are at 32k context, approximate us-east-1 on-demand.
+Approximate us-east-1 on-demand. Each doc breaks the same model down by context length and
+user count.
 
-## Three things worth knowing before reading any of them
+## Why these are bigger than "minimum to run"
 
-**The price floor spans 51x, and it is not proportional to model size.** GPT-OSS 20B runs on a
-single L4 for $584/month. Nemotron 3 Super needs 8x A100-80 for $29,908/month — 51x the cost for
-6x the weights. The jump is caused by AWS not renting single A100/H100/B200 GPUs: the p-family
-starts at 8, so once a model needs that class of hardware the floor leaps.
+Loading the weights is the easy part. Serving 10 users who can each fill the full context
+window is what sets the instance. GPT-OSS 20B loads on a single $584/month L4 — but 10 users
+at its native 131,072-token context need 32 GB of KV on top of 13.8 GB of weights, so the real
+answer is 4x L4 at $3,358/month. That gap is the point of these docs.
 
-**KV cache per sequence matters more than parameter count for scaling.** Llama 3.3 70B is only
-39.6 GB of weights but 5.4 GB of KV per sequence at 32k context, because all 80 of its layers do
-full attention. Nemotron 3 Super is twice the weights but has only 8 attention layers out of 88,
-so it costs 0.22 GB per sequence. Llama runs out of room at ~100 concurrent users on an 8-GPU
-box; Nemotron fits thousands. Sliding-window attention — in both Gemma families and GPT-OSS —
-has the same effect.
+## The three levers, in order of impact
 
-**These are memory ceilings, not throughput promises.** Every number here is derived from the
-model's `config.json` and is exact as far as it goes, but it tells you what *fits*, not what
-*performs*. Latency binds long before memory does. Red Hat publishes accuracy benchmarks for its
-validated models and no throughput, latency or concurrency figures at all, so there is nothing
-authoritative to cite — you have to measure:
+**1. Context length.** KV scales linearly with `--max-model-len` and dominates everything else
+at default settings. GPT-OSS 20B for 10 users costs $584/month at 8k context and $3,358/month
+at its 131k default — a 5.7x swing from one flag. Most agentic traffic never fills the window.
+Cap it at what you actually use.
+
+**2. KV cache dtype.** Only Nemotron 3 Super declares an FP8 KV cache in its checkpoint. Every
+other model here keeps KV in FP16 by default, so `--kv-cache-dtype fp8` halves per-sequence KV
+and frequently drops you a whole instance class. Validate accuracy against your own evals first.
+
+**3. Attention architecture, which you cannot change but should understand.** Llama 3.3 70B is
+the smallest of the large models at 39.6 GB of weights, yet the most expensive to scale: all 80
+layers do full attention, so each user costs 42.9 GB of KV at 128k. Nemotron 3 Super is twice
+the weights but has only 8 attention layers of 88 and an FP8 KV cache — 1.2 GB per user at
+*twice* the context. Sliding-window attention in the Gemma and GPT-OSS families has the same
+dampening effect. Parameter count is a poor predictor of serving cost.
+
+## What these numbers are and are not
+
+The memory arithmetic is exact, derived from each model's `config.json`, and it is deliberately
+conservative: it guarantees all 10 users can hold a full window simultaneously. vLLM allocates
+KV blocks on demand, so steady-state usage is lower — but this is the figure that cannot
+over-commit.
+
+**Throughput is not modelled.** Red Hat publishes accuracy benchmarks for its validated models
+and no throughput, latency or concurrency figures anywhere, so there is nothing authoritative to
+cite. Latency will bind before memory does. Measure on the candidate instance:
 
 ```bash
 vllm bench serve --model <name> --host localhost --port 8000 \
   --dataset-name random --random-input-len 4000 --random-output-len 500 \
-  --max-concurrency 32 --num-prompts 200
+  --max-concurrency 10 --num-prompts 100
 ```
 
 ## Not covered
 
-- **Laya 0.3** — vLLM cannot serve it. Its `config.json` declares `LayaTypedDecisions`, not a
-  vLLM architecture, and the model card states it *"never generates text"*. See note B in
-  `../generative-ai-models.md`.
-- **Llama 3.2 11B Vision Instruct** — Red Hat publishes no build of this model, so there is no
-  ModelCar to size. See note C.
-- Cloud-hosted entries (Bedrock, Google Cloud) — not self-hosted, so GPU sizing does not apply.
+- **Laya 0.3** — vLLM cannot serve it; `config.json` declares `LayaTypedDecisions` and the card
+  states it *"never generates text"*. See note B in `../generative-ai-models.md`.
+- **Llama 3.2 11B Vision Instruct** — Red Hat publishes no build, so there is no ModelCar to
+  size. See note C.
+- Cloud-hosted entries (Bedrock, Google Cloud) — GPU sizing does not apply.
 
-`../hack/size-nemotron-super.py` models Nemotron 3 Super interactively, with throughput
-estimation and GuideLLM calibration. The other models have static docs only.
+Regenerate all seven with `../hack/gen-sizing-docs.py`. `../hack/size-nemotron-super.py` does
+interactive what-if on Nemotron specifically, including throughput estimation.

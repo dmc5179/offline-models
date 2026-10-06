@@ -30,7 +30,7 @@ M = [
  dict(slug='nemotron-3-super-120b', title='Nemotron 3 Super 120B-A12B (NVFP4)',
       car='registry.redhat.io/rhai/modelcar-nvidia-nemotron-3-super-120b-a12b-nvfp4:3.0',
       img_gb=80.4, weights_gb=80.4, layers=88, full=8, slid=0, win=0, kvh=2, hd=128, kvb=1,
-      ctx=262144, arch='LatentMoE — Mamba-2 + MoE + attention hybrid, with MTP',
+      ctx=262144, native=262144, kvb_note='FP8 (declared in checkpoint)', arch='LatentMoE — Mamba-2 + MoE + attention hybrid, with MTP',
       extra_seq_mb=87, extra_note='87 MB Mamba2 state per sequence (constant, `--mamba-ssm-cache-dtype float16`)',
       params='120B total, 12B active', quant='NVFP4 mixed precision (FP4 experts, FP8 mixer)',
       min_gpu='1x B200 or 1x DGX Spark', micro='A100, H100-80GB, Blackwell',
@@ -41,7 +41,7 @@ M = [
  dict(slug='llama-3.3-70b', title='Llama 3.3 70B Instruct',
       car='registry.redhat.io/rhelai1/modelcar-llama-3-3-70b-instruct-quantized-w4a16:1.5',
       img_gb=39.6, weights_gb=39.6, layers=80, full=80, slid=0, win=0, kvh=8, hd=128, kvb=2,
-      ctx=131072, arch='Dense transformer, no sliding window',
+      ctx=131072, native=131072, kvb_note='FP16 (no FP8 scheme declared)', arch='Dense transformer, no sliding window',
       extra_seq_mb=0, extra_note=None, params='70B dense', quant='INT4 (w4a16)',
       min_gpu=None, micro=None, validated=None,
       hook='All 80 layers are full attention, so KV is 320 KiB/token — the most expensive per-sequence of this set.',
@@ -53,7 +53,7 @@ M = [
  dict(slug='gemma-3-12b', title='Gemma 3 12B Instruct',
       car='registry.redhat.io/rhai/modelcar-gemma-3-12b-it:3.0',
       img_gb=24.4, weights_gb=24.4, layers=48, full=8, slid=40, win=1024, kvh=8, hd=256, kvb=2,
-      ctx=131072, arch='Dense multimodal, sliding-window attention',
+      ctx=131072, native=131072, kvb_note='FP16 (no FP8 scheme declared)', arch='Dense multimodal, sliding-window attention',
       extra_seq_mb=0, extra_note=None, params='12B dense', quant='none (bf16)',
       min_gpu=None, micro=None, validated=None,
       hook='Unquantized bf16, so a 12B model costs 24.4 GB — more than the 26B FP8 MoE below it.',
@@ -66,7 +66,7 @@ M = [
  dict(slug='gemma-4-26b-a4b', title='Gemma 4 26B-A4B Instruct (FP8)',
       car='registry.redhat.io/rhai/modelcar-gemma-4-26b-a4b-it-fp8-dynamic:3.0',
       img_gb=28.7, weights_gb=28.6, layers=30, full=5, slid=25, win=1024, kvh=8, hd=256, kvb=2,
-      ctx=262144, arch='Sparse MoE, multimodal, 25 sliding + 5 full attention',
+      ctx=262144, native=262144, kvb_note='FP16 (no FP8 scheme declared)', arch='Sparse MoE, multimodal, 25 sliding + 5 full attention',
       extra_seq_mb=0, extra_note=None, params='26B total, ~4B active', quant='FP8 dynamic',
       min_gpu=None, micro=None, validated=None,
       hook='Only 5 of 30 layers do full attention, so the memory curve is nearly flat across context length.',
@@ -79,7 +79,7 @@ M = [
  dict(slug='gemma-4-31b', title='Gemma 4 31B Instruct (FP8)',
       car='registry.redhat.io/rhai/modelcar-gemma-4-31b-it-fp8-dynamic:3.0',
       img_gb=33.3, weights_gb=33.3, layers=60, full=10, slid=50, win=1024, kvh=16, hd=256, kvb=2,
-      ctx=262144, arch='Dense multimodal, 50 sliding + 10 full attention',
+      ctx=262144, native=262144, kvb_note='FP16 (no FP8 scheme declared)', arch='Dense multimodal, 50 sliding + 10 full attention',
       extra_seq_mb=0, extra_note=None, params='31B dense', quant='FP8 dynamic',
       min_gpu=None, micro=None, validated=None,
       hook='Dense rather than MoE, and 16 KV heads — twice the per-sequence KV of the 26B MoE.',
@@ -91,7 +91,7 @@ M = [
  dict(slug='gpt-oss-120b', title='GPT-OSS 120B',
       car='registry.redhat.io/rhai/modelcar-gpt-oss-120b-essential:3.0',
       img_gb=65.3, weights_gb=65.2, layers=36, full=18, slid=18, win=128, kvh=8, hd=64, kvb=2,
-      ctx=131072, arch='Sparse MoE, 128 experts top-4, alternating sliding/full attention',
+      ctx=131072, native=131072, kvb_note='FP16 (no FP8 scheme declared)', arch='Sparse MoE, 128 experts top-4, alternating sliding/full attention',
       extra_seq_mb=0, extra_note=None, params='120B total, ~5B active', quant='MXFP4',
       min_gpu=None, micro=None, validated=None,
       hook='A 128-token sliding window on half the layers keeps KV small despite 36 layers.',
@@ -101,7 +101,7 @@ M = [
  dict(slug='gpt-oss-20b', title='GPT-OSS 20B',
       car='registry.redhat.io/rhai/modelcar-gpt-oss-20b-essential:3.0',
       img_gb=13.8, weights_gb=13.8, layers=24, full=12, slid=12, win=128, kvh=8, hd=64, kvb=2,
-      ctx=131072, arch='Sparse MoE, 32 experts top-4, alternating sliding/full attention',
+      ctx=131072, native=131072, kvb_note='FP16 (no FP8 scheme declared)', arch='Sparse MoE, 32 experts top-4, alternating sliding/full attention',
       extra_seq_mb=0, extra_note=None, params='21B total, ~3.6B active', quant='MXFP4',
       min_gpu=None, micro=None, validated=None,
       hook='The cheapest model here to host — fits a single 24 GB GPU with room for hundreds of sequences.',
@@ -129,21 +129,38 @@ def fits(m, inst, ctx):
     return int(free * 1e9 / kv_per_seq(m, ctx))
 
 
+TARGET_USERS = 10
+
+
+def kv_bytes(m, ctx, kvb=None):
+    b = m['kvh'] * m['hd'] * 2 * (kvb if kvb else m['kvb'])
+    full = m['full'] * b * ctx
+    slid = m['slid'] * b * min(ctx, m['win']) if m['slid'] else 0
+    return full + slid + m['extra_seq_mb'] * 1e6
+
+
+def cheapest_for(m, users, ctx, kvb=None):
+    need = m['weights_gb'] + kv_bytes(m, ctx, kvb) * users / 1e9
+    allow = m.get('gpus_allowed')
+    for name, gpu, n, gb, bw, price, bb in INSTANCES:
+        if allow and gpu not in allow:
+            continue
+        if n * gb * USABLE - n * RESERVE_GB_PER_GPU >= need:
+            return (name, gpu, n, price, need)
+    return None
+
+
 def doc(m):
-    ctxs = [8192, 32768, 131072]
-    ctx_default = 32768
-    L = []
-    a = L.append
+    native = m['native']
+    L = []; a = L.append
     a(f"# {m['title']} — GPU sizing")
     a("")
-    a(f"```")
-    a(f"{m['car']}")
-    a(f"```")
+    a(f"```\n{m['car']}\n```")
     a("")
     a(f"{m['hook']}")
     a("")
-    a(f"| | |")
-    a(f"|---|---|")
+    a("| | |")
+    a("|---|---|")
     a(f"| Parameters | {m['params']} |")
     a(f"| Quantization | {m['quant']} |")
     a(f"| Weights | {m['weights_gb']} GB |")
@@ -152,89 +169,104 @@ def doc(m):
     a(f"| Attention layers | {m['full']} full"
       + (f" + {m['slid']} sliding ({m['win']}-token window)" if m['slid'] else "")
       + f", of {m['layers']} total |")
-    a(f"| Max context | {m['ctx']:,} |")
+    a(f"| **Default context** | **{native:,}** (vLLM derives `--max-model-len` from this) |")
+    a(f"| KV cache dtype | {m['kvb_note']} |")
     if m.get('min_gpu'):   a(f"| Minimum GPU (model card) | {m['min_gpu']} |")
     if m.get('micro'):     a(f"| Supported microarch | {m['micro']} |")
     if m.get('validated'): a(f"| Validated on | {m['validated']} |")
     a("")
 
-    a("## Memory per concurrent sequence")
+    # ---- the headline recommendation
+    per = kv_bytes(m, native)
+    pick = cheapest_for(m, TARGET_USERS, native)
+    a(f"## Recommended: {TARGET_USERS} concurrent users at the default {native:,} context")
     a("")
-    if m['extra_note']: a(f"Plus {m['extra_note']}.")
+    a(f"Each sequence needs **{per/1e9:.1f} GB** of KV"
+      + (f" plus state" if m['extra_seq_mb'] else "") + " to hold a full context window.")
     a("")
-    a("| Context | KV + state per sequence |")
-    a("|---|---|")
-    for c in ctxs:
-        a(f"| {c:,} | {kv_per_seq(m,c)/1e6:,.0f} MB |")
+    a(f"```")
+    a(f"{m['weights_gb']:>6.1f} GB  weights")
+    a(f"{per*TARGET_USERS/1e9:>6.1f} GB  KV for {TARGET_USERS} users x {native:,} tokens")
+    a(f"{'─'*6}")
+    a(f"{m['weights_gb'] + per*TARGET_USERS/1e9:>6.1f} GB  required, before activation overhead")
+    a(f"```")
     a("")
-    if m.get('assumption'): a(f"> {m['assumption']}")
-    if m.get('assumption'): a("")
-
-    a(f"## What fits, at {ctx_default:,} context")
-    a("")
-    if m.get('gpus_allowed'):
-        a(f"Restricted to the microarchitectures the model card supports "
-          f"({m.get('micro')}). Other GPU families are excluded even where the weights "
-          f"would arithmetically fit.")
-        a("")
-    a("| Instance | GPUs | $/hr | Concurrent sequences that fit |")
-    a("|---|---|---|---|")
-    viable = []
-    for inst in INSTANCES:
-        name, gpu, n, gb, bw, price, bb = inst
-        s = fits(m, inst, ctx_default)
-        if s is None or s < 1: continue
-        viable.append((price, name, gpu, n, s))
-        a(f"| `{name}` | {n}x {gpu} | ${price:.2f} | {s:,} |")
-    a("")
-
-    if viable:
-        viable.sort()
-        price, name, gpu, n, s_cap = viable[0]
+    if pick:
+        name, gpu, n, price, need = pick
         mo = price * 730
-        a("## How many users needs how big a GPU")
+        a(f"### → `{name}` ({n}x {gpu}) — **${mo:,.0f}/month** (${price:.2f}/hr)")
         a("")
-        a(f"Cheapest instance that fits each user count, at {ctx_default:,} context:")
+        a(f"${mo/TARGET_USERS:,.0f} per user per month at {TARGET_USERS} users.")
+    else:
+        a(f"### → Exceeds every instance listed. {m['weights_gb'] + per*TARGET_USERS/1e9:,.0f} GB "
+          f"needed; the largest single node here is 8x B200 at 1,440 GB.")
         a("")
-        a("| Concurrent users | Instance | GPUs | $/month | $/user/month |")
-        a("|---|---|---|---|---|")
-        for u in (1, 5, 10, 25, 50, 100, 250):
-            pick = next((v for v in viable if v[4] >= u), None)
-            if not pick:
-                a(f"| {u} | — | — | — | exceeds every instance in this list |")
-                continue
-            pp, pn, pg, pnn, pc = pick
-            pmo = pp * 730
-            a(f"| {u} | `{pn}` | {pnn}x {pg} | ${pmo:,.0f} | ${pmo/u:,.0f} |")
-        a("")
-        a("## The price floor")
-        a("")
-        a(f"**${mo:,.0f}/month** — `{name}` ({n}x {gpu}) at ${price:.2f}/hr.")
-        a("")
-        a("That is a floor, not a starting point. It does not fall with fewer users: you rent "
-          "the whole instance whether one person uses it or " f"{min(s_cap, 100)}" " do. "
-          "Unit cost is purely a utilisation question.")
-        a("")
-        if n >= 8:
-            a(f"> **AWS sells no single-GPU {gpu} instance** — the p-family starts at 8. "
-              f"${mo:,.0f}/month is unavoidable even for a single user, so this model only "
-              f"makes economic sense at scale.")
+        a("Options: shorten `--max-model-len`, enable FP8 KV (below), or split across replicas.")
+    a("")
+
+    # ---- context is the dominant lever
+    a("## Context length is the dominant cost lever")
+    a("")
+    a(f"Same {TARGET_USERS} users, different `--max-model-len`:")
+    a("")
+    a("| --max-model-len | KV per user | Total needed | Instance | $/month |")
+    a("|---|---|---|---|---|")
+    for c in [8192, 32768, 131072, 262144]:
+        if c > native: continue
+        pk = cheapest_for(m, TARGET_USERS, c)
+        pr = kv_bytes(m, c)
+        if pk:
+            nm, g, nn, p, nd = pk
+            a(f"| {c:,}{' (default)' if c==native else ''} | {pr/1e9:.1f} GB | {nd:.0f} GB "
+              f"| `{nm}` ({nn}x {g}) | ${p*730:,.0f} |")
         else:
-            a(f"> At {ctx_default:,} context this instance holds **{s_cap} concurrent "
-              f"sequences**. Past that you step up, and the table above shows where.")
+            a(f"| {c:,}{' (default)' if c==native else ''} | {pr/1e9:.1f} GB | "
+              f"{m['weights_gb']+pr*TARGET_USERS/1e9:.0f} GB | — | exceeds all |")
+    a("")
+    a("Most agentic traffic never fills the window. Capping `--max-model-len` at what you "
+      "actually use is the single biggest saving available.")
+    a("")
+
+    # ---- fp8 kv lever, where it applies
+    if m['kvb'] == 2:
+        pk8 = cheapest_for(m, TARGET_USERS, native, kvb=1)
+        per8 = kv_bytes(m, native, kvb=1)
+        a("## FP8 KV cache halves it")
         a("")
-        a(f"Rough output-token cost at the floor instance, assuming 20 tok/s per active user "
-          f"sustained:")
+        a(f"This checkpoint declares no KV cache scheme, so vLLM keeps KV in FP16. Passing "
+          f"`--kv-cache-dtype fp8` halves per-sequence KV from {per/1e9:.1f} GB to "
+          f"{per8/1e9:.1f} GB:")
         a("")
-        a("| Users | $/1M output tokens |")
-        a("|---|---|")
-        for u in (1, 5, 10, 25, 50):
-            if u > s_cap: break
-            tok_mo = u * 20 * 3600 * 730
-            a(f"| {u} | ${mo/(tok_mo/1e6):.2f} |")
+        if pk8:
+            nm, g, nn, p, nd = pk8
+            a(f"| | Instance | $/month |")
+            a(f"|---|---|---|")
+            if pick:
+                a(f"| FP16 KV (default) | `{pick[0]}` ({pick[2]}x {pick[1]}) | ${pick[3]*730:,.0f} |")
+            else:
+                a(f"| FP16 KV (default) | exceeds all | — |")
+            a(f"| FP8 KV | `{nm}` ({nn}x {g}) | ${p*730:,.0f} |")
+            a("")
+        a("Accuracy impact is small for most workloads but is not zero — validate against your "
+          "own evals before relying on it.")
         a("")
-        a("Agentic traffic is bursty, so divide by your duty cycle — users idle 80% of the "
-          "time cost roughly a fifth of this.")
+
+    # ---- scaling
+    a(f"## Scaling past {TARGET_USERS} users, at default context")
+    a("")
+    a("| Users | Instance | $/month | $/user/month |")
+    a("|---|---|---|---|")
+    for u in (1, 5, 10, 25, 50, 100):
+        pk = cheapest_for(m, u, native)
+        if pk:
+            nm, g, nn, p, nd = pk
+            a(f"| {u} | `{nm}` ({nn}x {g}) | ${p*730:,.0f} | ${p*730/u:,.0f} |")
+        else:
+            a(f"| {u} | — | — | exceeds all listed instances |")
+    a("")
+
+    if m.get('assumption'):
+        a(f"> {m['assumption']}")
         a("")
 
     if m.get('variants'):
@@ -248,16 +280,18 @@ def doc(m):
 
     a("## Before you quote this")
     a("")
-    a("- **Memory numbers above are exact**, derived from the model's `config.json`. "
-      "Throughput is not modelled here — Red Hat publishes accuracy benchmarks for its "
-      "validated models but no throughput, latency or concurrency figures.")
-    a("- **The sequence counts are a memory ceiling, not a capacity promise.** Latency binds "
-      "long before memory does. Measure before committing:")
+    a("- Sizing above **guarantees** every one of the "
+      f"{TARGET_USERS} users can fill the full {native:,}-token window at once. vLLM allocates "
+      "KV blocks on demand, so real usage is lower — but this is the figure that cannot "
+      "over-commit.")
+    a("- **Memory is exact; throughput is not modelled.** Red Hat publishes accuracy benchmarks "
+      "for its validated models and no throughput, latency or concurrency figures. Latency will "
+      "bind before memory does. Measure:")
     a("")
     a("  ```bash")
     a("  vllm bench serve --model <name> --host localhost --port 8000 \\")
     a("    --dataset-name random --random-input-len 4000 --random-output-len 500 \\")
-    a("    --max-concurrency 32 --num-prompts 200")
+    a("    --max-concurrency 10 --num-prompts 100")
     a("  ```")
     a("")
     a("- Prices are approximate us-east-1 on-demand and drift. Verify before quoting.")

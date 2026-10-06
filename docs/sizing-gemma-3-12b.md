@@ -14,65 +14,59 @@ Unquantized bf16, so a 12B model costs 24.4 GB — more than the 26B FP8 MoE bel
 | Image to mirror | 24.4 GB |
 | Architecture | Dense multimodal, sliding-window attention |
 | Attention layers | 8 full + 40 sliding (1024-token window), of 48 total |
-| Max context | 131,072 |
+| **Default context** | **131,072** (vLLM derives `--max-model-len` from this) |
+| KV cache dtype | FP16 (no FP8 scheme declared) |
 
-## Memory per concurrent sequence
+## Recommended: 10 concurrent users at the default 131,072 context
 
+Each sequence needs **8.9 GB** of KV to hold a full context window.
 
-| Context | KV + state per sequence |
-|---|---|
-| 8,192 | 872 MB |
-| 32,768 | 2,483 MB |
-| 131,072 | 8,925 MB |
+```
+  24.4 GB  weights
+  89.3 GB  KV for 10 users x 131,072 tokens
+──────
+ 113.7 GB  required, before activation overhead
+```
+
+### → `g6e.12xlarge` (4x L40S) — **$7,658/month** ($10.49/hr)
+
+$766 per user per month at 10 users.
+
+## Context length is the dominant cost lever
+
+Same 10 users, different `--max-model-len`:
+
+| --max-model-len | KV per user | Total needed | Instance | $/month |
+|---|---|---|---|---|
+| 8,192 | 0.9 GB | 33 GB | `g6e.xlarge` (1x L40S) | $1,358 |
+| 32,768 | 2.5 GB | 49 GB | `g6.12xlarge` (4x L4) | $3,358 |
+| 131,072 (default) | 8.9 GB | 114 GB | `g6e.12xlarge` (4x L40S) | $7,658 |
+
+Most agentic traffic never fills the window. Capping `--max-model-len` at what you actually use is the single biggest saving available.
+
+## FP8 KV cache halves it
+
+This checkpoint declares no KV cache scheme, so vLLM keeps KV in FP16. Passing `--kv-cache-dtype fp8` halves per-sequence KV from 8.9 GB to 4.5 GB:
+
+| | Instance | $/month |
+|---|---|---|
+| FP16 KV (default) | `g6e.12xlarge` (4x L40S) | $7,658 |
+| FP8 KV | `g6.12xlarge` (4x L4) | $3,358 |
+
+Accuracy impact is small for most workloads but is not zero — validate against your own evals before relying on it.
+
+## Scaling past 10 users, at default context
+
+| Users | Instance | $/month | $/user/month |
+|---|---|---|---|
+| 1 | `g6e.xlarge` (1x L40S) | $1,358 | $1,358 |
+| 5 | `g6.12xlarge` (4x L4) | $3,358 | $672 |
+| 10 | `g6e.12xlarge` (4x L40S) | $7,658 | $766 |
+| 25 | `g6e.48xlarge` (8x L40S) | $21,995 | $880 |
+| 50 | `p4de.24xlarge` (8x A100-80) | $29,908 | $598 |
+| 100 | `p5e.48xlarge` (8x H200) | $45,099 | $451 |
 
 > Red Hat's config omits `layer_types`; the 40 sliding / 8 full split is inferred from Gemma 3's documented 5:1 ratio. Verify once downloaded.
-
-## What fits, at 32,768 context
-
-| Instance | GPUs | $/hr | Concurrent sequences that fit |
-|---|---|---|---|
-| `g6e.xlarge` | 1x L40S | $1.86 | 7 |
-| `g6e.2xlarge` | 1x L40S | $2.24 | 7 |
-| `g6.12xlarge` | 4x L4 | $4.60 | 22 |
-| `g5.12xlarge` | 4x A10G | $5.67 | 22 |
-| `g6e.12xlarge` | 4x L40S | $10.49 | 58 |
-| `g6e.48xlarge` | 8x L40S | $30.13 | 126 |
-| `p4d.24xlarge` | 8x A100-40 | $32.77 | 102 |
-| `p4de.24xlarge` | 8x A100-80 | $40.97 | 220 |
-| `p5.48xlarge` | 8x H100 | $55.04 | 220 |
-| `p5e.48xlarge` | 8x H200 | $61.78 | 401 |
-| `p6-b200.48xlarge` | 8x B200 | $92.00 | 517 |
-
-## How many users needs how big a GPU
-
-Cheapest instance that fits each user count, at 32,768 context:
-
-| Concurrent users | Instance | GPUs | $/month | $/user/month |
-|---|---|---|---|---|
-| 1 | `g6e.xlarge` | 1x L40S | $1,358 | $1,358 |
-| 5 | `g6e.xlarge` | 1x L40S | $1,358 | $272 |
-| 10 | `g6.12xlarge` | 4x L4 | $3,358 | $336 |
-| 25 | `g6e.12xlarge` | 4x L40S | $7,658 | $306 |
-| 50 | `g6e.12xlarge` | 4x L40S | $7,658 | $153 |
-| 100 | `g6e.48xlarge` | 8x L40S | $21,995 | $220 |
-| 250 | `p5e.48xlarge` | 8x H200 | $45,099 | $180 |
-
-## The price floor
-
-**$1,358/month** — `g6e.xlarge` (1x L40S) at $1.86/hr.
-
-That is a floor, not a starting point. It does not fall with fewer users: you rent the whole instance whether one person uses it or 7 do. Unit cost is purely a utilisation question.
-
-> At 32,768 context this instance holds **7 concurrent sequences**. Past that you step up, and the table above shows where.
-
-Rough output-token cost at the floor instance, assuming 20 tok/s per active user sustained:
-
-| Users | $/1M output tokens |
-|---|---|
-| 1 | $25.83 |
-| 5 | $5.17 |
-
-Agentic traffic is bursty, so divide by your duty cycle — users idle 80% of the time cost roughly a fifth of this.
 
 ## Variants
 
@@ -85,13 +79,13 @@ Agentic traffic is bursty, so divide by your duty cycle — users idle 80% of th
 
 ## Before you quote this
 
-- **Memory numbers above are exact**, derived from the model's `config.json`. Throughput is not modelled here — Red Hat publishes accuracy benchmarks for its validated models but no throughput, latency or concurrency figures.
-- **The sequence counts are a memory ceiling, not a capacity promise.** Latency binds long before memory does. Measure before committing:
+- Sizing above **guarantees** every one of the 10 users can fill the full 131,072-token window at once. vLLM allocates KV blocks on demand, so real usage is lower — but this is the figure that cannot over-commit.
+- **Memory is exact; throughput is not modelled.** Red Hat publishes accuracy benchmarks for its validated models and no throughput, latency or concurrency figures. Latency will bind before memory does. Measure:
 
   ```bash
   vllm bench serve --model <name> --host localhost --port 8000 \
     --dataset-name random --random-input-len 4000 --random-output-len 500 \
-    --max-concurrency 32 --num-prompts 200
+    --max-concurrency 10 --num-prompts 100
   ```
 
 - Prices are approximate us-east-1 on-demand and drift. Verify before quoting.
